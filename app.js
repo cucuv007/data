@@ -162,7 +162,7 @@ function render() {
   $('#list').innerHTML = rows.map(r => {
     const status = normalizeBool(r.durum);
     return `
-    <tr data-id="${rowId(r)}">
+    <tr data-id="${rowId(r)}" data-status="${status}">
       <td class="plaka"><span class="plate"><b>${esc(r.plaka)}</b></span></td>
       <td class="tarih date">${fmtDate(r.tarih)}</td>
       <td class="kurul">${esc(r.kurul)}</td>

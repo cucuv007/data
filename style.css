@@ -106,9 +106,9 @@ button:focus-visible, .btn:focus-within, a:focus-visible {
 }
 
 /* Liste (masaüstünde tablo, telefonda kart) */
-main { max-width: 1100px; margin: 0 auto; padding: 14px 16px 0; }
-.top-row, .tools { max-width: 1100px; }
-.table-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+main { max-width: 1400px; margin: 0 auto; padding: 14px 16px 0; }
+.top-row, .tools { max-width: 1400px; }
+.table-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; width: 100%; }
 table { width: 100%; border-collapse: collapse; }
 thead th { text-align: left; font-size: .85rem; color: var(--muted); font-weight: 600; padding: 10px 12px; background: var(--bg); border-bottom: 1px solid var(--line); }
 tbody td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -116,6 +116,15 @@ tbody tr:last-child td { border-bottom: 0; }
 tbody tr { cursor: context-menu; }
 tbody tr:hover { background: color-mix(in srgb, var(--brand) 7%, transparent); }
 tbody tr.sel { background: color-mix(in srgb, var(--brand) 14%, transparent); }
+tr[data-status="true"] {
+  background: color-mix(in srgb, #f4b942 18%, white 82%);
+}
+tr[data-status="true"]:hover {
+  background: color-mix(in srgb, #f4b942 28%, white 72%);
+}
+tr[data-status="true"].sel {
+  background: color-mix(in srgb, #f4b942 35%, white 65%);
+}
 td.note { color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 td.date { white-space: nowrap; color: var(--muted); }
 td.driver { font-weight: 600; }
