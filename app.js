@@ -148,8 +148,9 @@ function updateSorunluButton() {
   if (!btn) return;
   const flagged = records.filter(r => normalizeBool(r.durum)).length;
   btn.textContent = `Sorunlu${sorunluFilterActive ? ` (${flagged})` : ''}`;
-  btn.classList.toggle('primary', sorunluFilterActive);
+  btn.classList.toggle('danger', sorunluFilterActive);
   btn.classList.toggle('ghost', !sorunluFilterActive);
+  btn.classList.toggle('primary', false);
   btn.setAttribute('aria-pressed', String(sorunluFilterActive));
 }
 
@@ -408,13 +409,15 @@ function listeleHepsi() {
   updateSorunluButton();
   return ara();
 }
+window.toggleSorunluFilter = function () {
+  sorunluFilterActive = !sorunluFilterActive;
+  updateSorunluButton();
+  ara();
+};
+
 $('#searchBtn').addEventListener('click', ara);
 $('#advSearchBtn').addEventListener('click', ara);
 $('#listBtn').addEventListener('click', listeleHepsi);
-$('#sorunluBtn').addEventListener('click', () => {
-  sorunluFilterActive = !sorunluFilterActive;
-  ara();
-});
 ['#q', '#fPlaka', '#fDriver', '#fNot'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') ara(); }));
 
 $('#advBtn').addEventListener('click', () => {
