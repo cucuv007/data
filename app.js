@@ -8,6 +8,14 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 /* ---------- Veri katmanı (Supabase) ---------- */
+const recKey = rec => [rec?.kurul ?? '', rec?.tarih ?? '', rec?.plaka ?? ''].join('::');
+const isSyntheticId = id => typeof id === 'string' && id.includes('::');
+const stripSyntheticId = data => {
+  const out = { ...data };
+  if (isSyntheticId(out.id)) delete out.id;
+  return out;
+};
+
 const DB = {
   async req(path, method = 'GET', body = null) {
     const opts = {
@@ -27,24 +35,41 @@ const DB = {
     if (method === 'DELETE' || res.status === 204) return null;
     return await res.json();
   },
-  async all() { 
-    return this.req(`/rest/v1/${TABLE_NAME}?select=*&order=id.desc`); 
+  async all() {
+    const rows = await this.req(`/rest/v1/${TABLE_NAME}?select=*`);
+    return rows.map(r => ({ ...r, id: r.id ?? recKey(r) }));
   },
   async save(rec) {
+    const isUpdate = !!rec.id && !isSyntheticId(rec.id);
+    const isSyntheticRow = isSyntheticId(rec.id);
+    const filter = `kurul=eq.${encodeURIComponent(rec.kurul)}&tarih=eq.${encodeURIComponent(rec.tarih)}&plaka=eq.${encodeURIComponent(rec.plaka)}`;
+
     // Mükerrer kontrolü (kurul, tarih, plaka)
-    if (!rec.id) {
-      const dup = await this.req(`/rest/v1/${TABLE_NAME}?kurul=eq.${encodeURIComponent(rec.kurul)}&tarih=eq.${encodeURIComponent(rec.tarih)}&plaka=eq.${encodeURIComponent(rec.plaka)}&select=id`);
-      if (dup && dup.length > 0) throw new Error('Bu Kurul, Tarih ve Plaka ile daha önce bir kayıt girilmiş (Mükerrer Kayıt).');
+    if (!isUpdate) {
+      const dup = await this.req(`/rest/v1/${TABLE_NAME}?${filter}&select=*`);
+      const sameRow = dup.some(r => r.kurul === rec.kurul && r.tarih === rec.tarih && r.plaka === rec.plaka && (isSyntheticRow ? true : !(r.kurul === rec.kurul && r.tarih === rec.tarih && r.plaka === rec.plaka)));
+      if (dup && dup.length > 0 && !sameRow) {
+        throw new Error('Bu Kurul, Tarih ve Plaka ile daha önce bir kayıt girilmiş (Mükerrer Kayıt).');
+      }
     }
 
-    if (rec.id) {
+    if (isUpdate) {
       const { id, ...data } = rec;
       return this.req(`/rest/v1/${TABLE_NAME}?id=eq.${id}`, 'PATCH', data);
-    } else {
-      return this.req(`/rest/v1/${TABLE_NAME}`, 'POST', rec);
     }
+
+    if (isSyntheticRow) {
+      const { id, ...data } = rec;
+      return this.req(`/rest/v1/${TABLE_NAME}?${filter}`, 'PATCH', stripSyntheticId(data));
+    }
+
+    return this.req(`/rest/v1/${TABLE_NAME}`, 'POST', stripSyntheticId(rec));
   },
   async remove(id) {
+    if (isSyntheticId(id)) {
+      const [kurul, tarih, plaka] = String(id).split('::');
+      return this.req(`/rest/v1/${TABLE_NAME}?kurul=eq.${encodeURIComponent(kurul)}&tarih=eq.${encodeURIComponent(tarih)}&plaka=eq.${encodeURIComponent(plaka)}`, 'DELETE');
+    }
     return this.req(`/rest/v1/${TABLE_NAME}?id=eq.${id}`, 'DELETE');
   }
 };
@@ -90,7 +115,9 @@ async function uploadFile(file) {
     },
     body: comp
   });
-  if (!res.ok) throw new Error('Dosya yüklenemedi. Evrak_files bucketı var mı?');
+  if (!res.ok) {
+    throw new Error(`Dosya yüklenemedi. Supabase Storage bucket "${STORAGE_BUCKET}" mevcut değil veya erişim kapalı. Önce Supabase > Storage > New bucket ile "${STORAGE_BUCKET}" adında public bucket oluşturup tekrar deneyin.`);
+  }
   return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${fileName}`;
 }
 
@@ -104,6 +131,7 @@ let viewUrl = null;
 let applied = {};
 const tr = s => String(s ?? '').toLocaleLowerCase('tr');
 const plakaKey = s => tr(s).replace(/\s+/g, '');
+const rowId = r => String(r?.id ?? recKey(r));
 
 function readFilters() {
   return {
@@ -130,7 +158,7 @@ function render() {
   const rows = records.filter(r => matches(r, applied));
   $('#count').textContent = `${rows.length} kayıt`;
   $('#list').innerHTML = rows.map(r => `
-    <tr data-id="${r.id}">
+    <tr data-id="${rowId(r)}">
       <td class="plaka"><span class="plate"><b>${esc(r.plaka)}</b></span></td>
       <td class="tarih date">${fmtDate(r.tarih)}</td>
       <td class="kurul">${esc(r.kurul)}</td>
@@ -169,11 +197,21 @@ function refreshKurulLists() {
 }
 
 /* ---------- Form ---------- */
+function setSaveStatus(msg = '', mode = 'info') {
+  const status = $('#saveState');
+  if (!status) return;
+  status.hidden = !msg;
+  status.textContent = msg;
+  status.classList.remove('is-busy', 'is-success', 'is-error');
+  if (msg) status.classList.add(`is-${mode}`);
+}
+
 function openForm(rec = null) {
   editing = rec;
   const f = $('#form');
   f.reset();
   $('#formTitle').textContent = rec ? 'Kaydı düzenle' : 'Yeni kayıt';
+  setSaveStatus('', 'info');
   ['kurul', 'plaka', 'tarih', 'driver', 'not'].forEach(k => f.elements[k].value = rec?.[k] ?? '');
   if (!rec) f.elements.tarih.value = new Date().toISOString().slice(0, 10);
   
@@ -232,7 +270,8 @@ $('#form').addEventListener('submit', async e => {
   const btn = $('button[type=submit]', e.target);
   btn.disabled = true;
   btn.textContent = 'Kaydediliyor...';
-  
+  setSaveStatus('Kaydetme devam ediyor...', 'busy');
+
   try {
     const rec = {
       ...(editing || {}),
@@ -255,10 +294,13 @@ $('#form').addEventListener('submit', async e => {
 
     await DB.save(rec);
     records = await DB.all();
-    $('#formDlg').close();
     render();
-    toast(editing ? 'Kayıt güncellendi' : 'Kayıt eklendi');
+    $('#formDlg').close();
+    toast('Kaydetme tamamlandı');
+    setSaveStatus('Kaydetme tamamlandı', 'success');
+    setTimeout(() => setSaveStatus('', 'info'), 1200);
   } catch (err) {
+    setSaveStatus('Kaydetme sırasında hata oluştu. Lütfen kontrol edin.', 'error');
     toast(err.message || 'Kaydedilemedi.');
     console.error(err);
   } finally {
@@ -287,7 +329,7 @@ $('#viewDlg').addEventListener('close', () => { $('#viewBody').innerHTML = ''; }
 
 /* ---------- Olaylar ---------- */
 const docTitle = key => key === 'htt' ? 'HTT' : 'Fatura';
-const recOf = tr => records.find(r => r.id === +tr.dataset.id);
+const recOf = tr => records.find(r => rowId(r) === tr.dataset.id);
 
 async function deleteRec(rec) {
   if (!confirm(`${rec.plaka} plakalı kayıt silinsin mi?`)) return;
@@ -383,6 +425,7 @@ addEventListener('resize', closeCtx);
 $('#addBtn').addEventListener('click', () => openForm());
 $$('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
 $$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
+$('#formDlg').addEventListener('close', () => setSaveStatus('', 'info'));
 
 let toastTimer;
 function toast(msg) {
