@@ -103,7 +103,7 @@ async function compressImage(file, maxDim = 1200) {
 
 async function uploadFile(file) {
   const comp = await compressImage(file);
-  const ext = comp.name.split('.').pop() || 'jpg';
+  const ext = (comp.name.split('.').pop() || 'jpg').toLowerCase();
   const fileName = Date.now() + '_' + Math.random().toString(36).substr(2, 5) + '.' + ext;
   
   const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${fileName}`, {
