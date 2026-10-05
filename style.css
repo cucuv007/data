@@ -207,7 +207,7 @@ td.act .btn { margin-left: 4px; }
   border-color: #b3261e;
   box-shadow: 0 1px 0 rgba(179, 38, 30, .25);
 }
-#sorunluBtn[aria-pressed="true"] {
+#sorunluBtn {
   color: #fff;
   background: linear-gradient(180deg, #d93d36 0%, #b3261e 100%);
   border-color: #b3261e;

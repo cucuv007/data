@@ -148,9 +148,8 @@ function updateSorunluButton() {
   if (!btn) return;
   const flagged = records.filter(r => normalizeBool(r.durum)).length;
   btn.textContent = `Sorunlu${sorunluFilterActive ? ` (${flagged})` : ''}`;
-  btn.classList.toggle('danger', sorunluFilterActive);
-  btn.classList.toggle('ghost', !sorunluFilterActive);
-  btn.classList.toggle('primary', false);
+  btn.classList.remove('ghost', 'primary');
+  btn.classList.add('danger');
   btn.setAttribute('aria-pressed', String(sorunluFilterActive));
 }
 
