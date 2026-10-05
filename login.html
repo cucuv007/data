@@ -78,6 +78,11 @@ $('#toggle').addEventListener('click', e => {
   e.target.setAttribute('aria-pressed', show);
 });
 
+/* Kullanıcı adı alanını hep küçük harfe zorla */
+$('#user').addEventListener('input', e => {
+  e.target.value = e.target.value.toLocaleLowerCase('tr-TR');
+});
+
 let tries = 0, lockTimer;
 function lock() {
   let left = LOCK_SEC;
