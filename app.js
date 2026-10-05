@@ -10,6 +10,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 /* ---------- Veri katmanı (Supabase) ---------- */
 const recKey = rec => [rec?.kurul ?? '', rec?.tarih ?? '', rec?.plaka ?? ''].join('::');
 const isSyntheticId = id => typeof id === 'string' && id.includes('::');
+const normalizeBool = v => v === true || v === 'true' || v === 1 || v === '1';
 const stripSyntheticId = data => {
   const out = { ...data };
   if (isSyntheticId(out.id)) delete out.id;
@@ -37,12 +38,13 @@ const DB = {
   },
   async all() {
     const rows = await this.req(`/rest/v1/${TABLE_NAME}?select=*`);
-    return rows.map(r => ({ ...r, id: r.id ?? recKey(r) }));
+    return rows.map(r => ({ ...r, id: r.id ?? recKey(r), durum: normalizeBool(r.durum) }));
   },
   async save(rec) {
     const isUpdate = !!rec.id && !isSyntheticId(rec.id);
     const isSyntheticRow = isSyntheticId(rec.id);
     const filter = `kurul=eq.${encodeURIComponent(rec.kurul)}&tarih=eq.${encodeURIComponent(rec.tarih)}&plaka=eq.${encodeURIComponent(rec.plaka)}`;
+    const payload = { ...stripSyntheticId(rec), durum: normalizeBool(rec.durum ?? false) };
 
     // Mükerrer kontrolü (kurul, tarih, plaka)
     if (!isUpdate) {
@@ -55,15 +57,15 @@ const DB = {
 
     if (isUpdate) {
       const { id, ...data } = rec;
-      return this.req(`/rest/v1/${TABLE_NAME}?id=eq.${id}`, 'PATCH', data);
+      return this.req(`/rest/v1/${TABLE_NAME}?id=eq.${id}`, 'PATCH', { ...data, durum: normalizeBool(data.durum ?? false) });
     }
 
     if (isSyntheticRow) {
       const { id, ...data } = rec;
-      return this.req(`/rest/v1/${TABLE_NAME}?${filter}`, 'PATCH', stripSyntheticId(data));
+      return this.req(`/rest/v1/${TABLE_NAME}?${filter}`, 'PATCH', { ...stripSyntheticId(data), durum: normalizeBool(data.durum ?? false) });
     }
 
-    return this.req(`/rest/v1/${TABLE_NAME}`, 'POST', stripSyntheticId(rec));
+    return this.req(`/rest/v1/${TABLE_NAME}`, 'POST', payload);
   },
   async remove(id) {
     if (isSyntheticId(id)) {
@@ -157,20 +159,24 @@ const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('tr-TR', {
 function render() {
   const rows = records.filter(r => matches(r, applied));
   $('#count').textContent = `${rows.length} kayıt`;
-  $('#list').innerHTML = rows.map(r => `
+  $('#list').innerHTML = rows.map(r => {
+    const status = normalizeBool(r.durum);
+    return `
     <tr data-id="${rowId(r)}">
       <td class="plaka"><span class="plate"><b>${esc(r.plaka)}</b></span></td>
       <td class="tarih date">${fmtDate(r.tarih)}</td>
       <td class="kurul">${esc(r.kurul)}</td>
       <td class="driver">${esc(r.driver)}</td>
-      <td class="note" title="${esc(r.not)}">${esc(r.not)}</td>
+      <td class="note" title="${esc(r.not)}">${esc(r.not || '—')}</td>
+      <td class="durum">${status ? '<span class="doc has">Sorunlu</span>' : '<span class="doc none">Normal</span>'}</td>
       <td class="htt">${docChip('htt', r.htt)}</td>
       <td class="fatura">${docChip('fatura', r.fatura)}</td>
       <td class="act">
         <button class="btn ghost small" data-act="edit">Düzenle</button>
         <button class="btn ghost small danger" data-act="del">Sil</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   $('#grid').hidden = rows.length === 0;
   $('#empty').hidden = rows.length > 0;
@@ -214,6 +220,13 @@ function openForm(rec = null) {
   setSaveStatus('', 'info');
   ['kurul', 'plaka', 'tarih', 'driver', 'not'].forEach(k => f.elements[k].value = rec?.[k] ?? '');
   if (!rec) f.elements.tarih.value = new Date().toISOString().slice(0, 10);
+  if (!rec && !f.elements.durum) {
+    const statusWrap = document.createElement('div');
+    statusWrap.className = 'field';
+    statusWrap.innerHTML = '<span>Durum</span><label class="toggle-row"><input type="checkbox" name="durum"> Sorunlu değil</label>';
+    f.insertBefore(statusWrap, f.querySelector('.file[data-key="htt"]'));
+  }
+  if (f.elements.durum) f.elements.durum.checked = normalizeBool(rec?.durum ?? false);
   
   files = { htt: [], fatura: [] };
   if (rec) {
@@ -279,7 +292,8 @@ $('#form').addEventListener('submit', async e => {
       plaka: f.plaka.value.trim().toLocaleUpperCase('tr'),
       tarih: f.tarih.value,
       driver: f.driver.value.trim(),
-      not: f.not.value.trim()
+      not: f.not.value.trim(),
+      durum: !!(f.durum ? f.durum.checked : false)
     };
 
     // Dosyaları yükle
@@ -326,6 +340,11 @@ function showFile(jsonStr, title) {
   } catch(e) {}
 }
 $('#viewDlg').addEventListener('close', () => { $('#viewBody').innerHTML = ''; });
+function showNotePopup(text) {
+  const box = $('#noteText');
+  box.textContent = text || 'Not eklenmemiş.';
+  $('#noteDlg').showModal();
+}
 
 /* ---------- Olaylar ---------- */
 const docTitle = key => key === 'htt' ? 'HTT' : 'Fatura';
@@ -350,6 +369,7 @@ $('#list').addEventListener('click', e => {
   if (act === 'edit') openForm(rec);
   if (act === 'view') showFile(rec[btn.dataset.key], docTitle(btn.dataset.key));
   if (act === 'del') deleteRec(rec);
+  if (act === 'note') showNotePopup(rec.not || 'Not eklenmemiş.');
 });
 
 async function ara() {
@@ -387,6 +407,8 @@ function openCtx(tr, x, y) {
   tr.classList.add('sel');
   $('[data-ctx=htt]', ctx).disabled = !ctxRec.htt || ctxRec.htt === '[]';
   $('[data-ctx=fatura]', ctx).disabled = !ctxRec.fatura || ctxRec.fatura === '[]';
+  const toggleBtn = $('[data-ctx=toggle-status]', ctx);
+  toggleBtn.textContent = normalizeBool(ctxRec.durum) ? 'Normal olarak işaretle' : 'Sorunlu işaretle';
   ctx.hidden = false;
   const w = ctx.offsetWidth, h = ctx.offsetHeight;
   ctx.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + 'px';
@@ -399,6 +421,12 @@ $('#list').addEventListener('contextmenu', e => {
   if (!tr) return;
   e.preventDefault();
   openCtx(tr, e.clientX, e.clientY);
+});
+$('#list').addEventListener('dblclick', e => {
+  const tr = e.target.closest('tr');
+  if (!tr || e.target.closest('button')) return;
+  e.preventDefault();
+  openCtx(tr, e.clientX || innerWidth / 2, e.clientY || innerHeight / 2);
 });
 $('#list').addEventListener('touchstart', e => {
   const tr = e.target.closest('tr');
@@ -413,9 +441,21 @@ ctx.addEventListener('click', e => {
   if (!b || b.disabled) return;
   const rec = ctxRec, a = b.dataset.ctx;
   closeCtx();
+  if (a === 'note') showNotePopup(rec.not || 'Not eklenmemiş.');
   if (a === 'htt' || a === 'fatura') showFile(rec[a], docTitle(a));
   if (a === 'edit') openForm(rec);
   if (a === 'del') deleteRec(rec);
+  if (a === 'toggle-status') {
+    const newStatus = !normalizeBool(rec.durum);
+    DB.save({ ...rec, durum: newStatus }).then(async () => {
+      records = await DB.all();
+      render();
+      toast(newStatus ? 'Kayıt sorunlu olarak işaretlendi.' : 'Kayıt normal olarak işaretlendi.');
+    }).catch(err => {
+      console.error(err);
+      toast('Durum güncellenemedi.');
+    });
+  }
 });
 document.addEventListener('pointerdown', e => { if (!ctx.hidden && !ctx.contains(e.target)) closeCtx(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtx(); });

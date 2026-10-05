@@ -80,6 +80,7 @@
             <th>Kurul</th>
             <th>Sürücü</th>
             <th>Not</th>
+            <th>Durum</th>
             <th>HTT</th>
             <th>Fatura</th>
             <th>İşlem</th>
@@ -183,12 +184,24 @@
 
   <!-- Sağ tık menüsü -->
   <div id="ctx" class="ctx" role="menu" hidden>
+    <button role="menuitem" data-ctx="note">Notu göster</button>
     <button role="menuitem" data-ctx="htt">HTT'yi göster</button>
     <button role="menuitem" data-ctx="fatura">Faturayı göster</button>
     <hr>
+    <button role="menuitem" data-ctx="toggle-status">Sorunlu işaretle</button>
     <button role="menuitem" data-ctx="edit">Düzenle</button>
     <button role="menuitem" data-ctx="del" class="danger">Sil</button>
   </div>
+
+  <dialog id="noteDlg" class="sheet small-sheet">
+    <div class="sheet-head">
+      <h2>Not</h2>
+      <button type="button" class="icon" data-close aria-label="Kapat">✕</button>
+    </div>
+    <div class="sheet-body">
+      <p id="noteText" class="note-text"></p>
+    </div>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
