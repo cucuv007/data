@@ -50,18 +50,10 @@
 </main>
 
 <script>
-/* ---------------------------------------------------------------
-   KULLANICILAR
-   Şifreler düz metin değil, SHA-256 özeti olarak tutulur.
-   Varsayılan:  kullanıcı "admin"  /  şifre "admin123"  (mutlaka değiştirin)
+const SUPABASE_URL = 'https://rcvyytkxcgmydkcicxdz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_GpnawTaymipKiC-n4HEUcw_D5_eyEgT';
+const TABLE_NAME = 'd_data'; // Tablo adı (Gerekirse "Kullanıcılar" olarak değiştirebilirsiniz)
 
-   Yeni özet üretmek için tarayıcı konsoluna şunu yapıştırın (şifreyi değiştirin):
-   crypto.subtle.digest('SHA-256', new TextEncoder().encode('YENI_SIFRE'))
-     .then(b => console.log([...new Uint8Array(b)].map(x => x.toString(16).padStart(2,'0')).join('')))
----------------------------------------------------------------- */
-const USERS = [
-  { ad: 'admin', hash: '240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9' }
-];
 const SESSION_KEY = 'evrak-oturum';
 const HOURS = 12;
 const MAX_TRIES = 5, LOCK_SEC = 30;
@@ -78,11 +70,6 @@ const form = $('#loginForm'), err = $('#err'), btn = $('#submit');
     } catch (e) {}
   }
 })();
-
-async function sha256(text) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
-}
 
 $('#toggle').addEventListener('click', e => {
   const p = $('#pass'), show = p.type === 'password';
@@ -105,26 +92,46 @@ function lock() {
 form.addEventListener('submit', async e => {
   e.preventDefault();
   err.textContent = '';
-  if (!window.crypto?.subtle) {
-    err.textContent = 'Giriş için güvenli bağlantı (https) gerekli.';
-    return;
-  }
-  const ad = $('#user').value.trim().toLowerCase();
-  const hash = await sha256($('#pass').value);
-  const ok = USERS.some(u => u.ad.toLowerCase() === ad && u.hash === hash);
+  
+  const ad = $('#user').value.trim();
+  const pass = $('#pass').value;
 
-  if (!ok) {
-    $('#pass').value = '';
-    $('#pass').focus();
-    if (++tries >= MAX_TRIES) return lock();
-    err.textContent = 'Kullanıcı adı veya şifre hatalı.';
-    return;
+  btn.disabled = true;
+  btn.textContent = 'Giriş yapılıyor...';
+
+  try {
+    // Supabase REST API üzerinden kullanıcı adı ve şifreyi sorgula
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE_NAME}?name=eq.${encodeURIComponent(ad)}&pass=eq.${encodeURIComponent(pass)}&select=*`, {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`
+      }
+    });
+
+    if (!res.ok) throw new Error('Veritabanı bağlantısında sorun oluştu.');
+    
+    const data = await res.json();
+    
+    if (data.length > 0) {
+      // Başarılı giriş
+      const session = JSON.stringify({ user: ad, exp: Date.now() + HOURS * 3600 * 1000 });
+      localStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem(SESSION_KEY);
+      ($('#remember').checked ? localStorage : sessionStorage).setItem(SESSION_KEY, session);
+      location.replace('index.html');
+    } else {
+      // Hatalı giriş
+      $('#pass').value = '';
+      $('#pass').focus();
+      if (++tries >= MAX_TRIES) return lock();
+      err.textContent = 'Kullanıcı adı veya şifre hatalı.';
+    }
+  } catch (error) {
+    err.textContent = error.message;
+  } finally {
+    if (tries < MAX_TRIES) btn.disabled = false;
+    btn.textContent = 'Giriş yap';
   }
-  const session = JSON.stringify({ user: ad, exp: Date.now() + HOURS * 3600 * 1000 });
-  localStorage.removeItem(SESSION_KEY);
-  sessionStorage.removeItem(SESSION_KEY);
-  ($('#remember').checked ? localStorage : sessionStorage).setItem(SESSION_KEY, session);
-  location.replace('index.html');
 });
 </script>
 </body>
