@@ -55,6 +55,7 @@ h1, h2 { margin: 0; }
 .top-row { display: flex; align-items: baseline; justify-content: space-between; max-width: 820px; margin: 0 auto 10px; }
 .top h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; }
 .count { color: var(--muted); font-size: .9rem; }
+.top-right { display: flex; align-items: center; gap: 10px; }
 .tools { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 auto; }
 .tools #q, .tools #advBtn { grid-column: 1 / -1; }
 @media (min-width: 560px) { .tools { grid-template-columns: 1fr auto auto auto; } .tools #q, .tools #advBtn { grid-column: auto; } }
@@ -85,6 +86,7 @@ h1, h2 { margin: 0; }
 .top-row { display: flex; align-items: baseline; justify-content: space-between; max-width: 820px; margin: 0 auto 10px; }
 .top h1 { font-size: 1.35rem; font-weight: 700; letter-spacing: -.01em; }
 .count { color: var(--muted); font-size: .9rem; }
+.top-right { display: flex; align-items: center; gap: 10px; }
 .tools { display: grid; grid-template-columns: 1fr; gap: 8px; max-width: 820px; margin: 0 auto; }
 .tools .btn { width: 100%; }
 @media (min-width: 560px) { .tools { grid-template-columns: 1fr 200px auto; } .tools .btn { width: auto; } }

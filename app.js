@@ -287,5 +287,12 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
+/* ---------- Çıkış ---------- */
+$('#logoutBtn').addEventListener('click', () => {
+  localStorage.removeItem('evrak-oturum');
+  sessionStorage.removeItem('evrak-oturum');
+  location.replace('login.html');
+});
+
 /* ---------- Başlat ---------- */
 DB.open().then(DB.all.bind(DB)).then(rows => { records = rows; render(); });
