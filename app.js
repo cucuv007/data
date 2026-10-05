@@ -451,14 +451,20 @@ ctx.addEventListener('click', e => {
     });
   }
 });
-document.addEventListener('pointerdown', e => { if (!ctx.hidden && !ctx.contains(e.target)) closeCtx(); });
+document.addEventListener('pointerdown', e => {
+  if (!ctx.hidden && !ctx.contains(e.target) && !e.target.closest('dialog')) closeCtx();
+});
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeCtx(); });
 addEventListener('scroll', closeCtx, true);
 addEventListener('resize', closeCtx);
 
 $('#addBtn').addEventListener('click', () => openForm());
 $$('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
-$$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
+$$('dialog').forEach(d => {
+  d.addEventListener('click', e => { if (e.target === d) d.close(); });
+  d.addEventListener('pointerdown', e => e.stopPropagation());
+});
+$('#form').addEventListener('pointerdown', e => e.stopPropagation());
 $('#formDlg').addEventListener('close', () => setSaveStatus('', 'info'));
 
 let toastTimer;
