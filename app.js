@@ -131,9 +131,27 @@ let viewUrl = null;
 
 /* ---------- Liste ---------- */
 let applied = {};
+let sorunluFilterActive = false;
 const tr = s => String(s ?? '').toLocaleLowerCase('tr');
 const plakaKey = s => tr(s).replace(/\s+/g, '');
 const rowId = r => String(r?.id ?? recKey(r));
+
+function normalizePlateValue(raw) {
+  let v = String(raw ?? '').replace(/[^A-Za-z0-9\s]/g, '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('tr');
+  if (!v) return '';
+  if (/^\d{2}\b/.test(v)) return v;
+  return `07 ${v}`;
+}
+
+function updateSorunluButton() {
+  const btn = $('#sorunluBtn');
+  if (!btn) return;
+  const flagged = records.filter(r => normalizeBool(r.durum)).length;
+  btn.textContent = `Sorunlu${sorunluFilterActive ? ` (${flagged})` : ''}`;
+  btn.classList.toggle('primary', sorunluFilterActive);
+  btn.classList.toggle('ghost', !sorunluFilterActive);
+  btn.setAttribute('aria-pressed', String(sorunluFilterActive));
+}
 
 function readFilters() {
   return {
@@ -152,6 +170,7 @@ function matches(r, f) {
   if (f.to && (r.tarih || '9') > f.to) return false;
   if (f.htt && (f.htt === 'var') !== !!r.htt) return false;
   if (f.fatura && (f.fatura === 'var') !== !!r.fatura) return false;
+  if (sorunluFilterActive && !normalizeBool(r.durum)) return false;
   return true;
 }
 const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
@@ -181,6 +200,7 @@ function render() {
   $('#grid').hidden = rows.length === 0;
   $('#empty').hidden = rows.length > 0;
   $('#empty').textContent = records.length ? 'Aramanızla eşleşen kayıt yok.' : 'Henüz kayıt yok. “Yeni kayıt” ile ilk evrakı ekleyin.';
+  updateSorunluButton();
   refreshKurulLists();
 }
 
@@ -220,6 +240,11 @@ function openForm(rec = null) {
   setSaveStatus('', 'info');
   ['kurul', 'plaka', 'tarih', 'driver', 'not'].forEach(k => f.elements[k].value = rec?.[k] ?? '');
   if (!rec) f.elements.tarih.value = new Date().toISOString().slice(0, 10);
+  if (f.elements.plaka) {
+    f.elements.plaka.addEventListener('input', e => {
+      e.target.value = normalizePlateValue(e.target.value);
+    }, { once: true });
+  }
   if (f.elements.durum) f.elements.durum.checked = normalizeBool(rec?.durum ?? false);
   
   files = { htt: [], fatura: [] };
@@ -285,7 +310,7 @@ $('#form').addEventListener('submit', async e => {
     const rec = {
       ...(editing || {}),
       kurul: f.kurul.value.trim(),
-      plaka: f.plaka.value.trim().toLocaleUpperCase('tr'),
+      plaka: normalizePlateValue(f.plaka.value),
       tarih: f.tarih.value,
       driver: f.driver.value.trim(),
       not: f.not.value.trim(),
@@ -379,11 +404,17 @@ async function ara() {
 function listeleHepsi() {
   $('#q').value = '';
   $$('#adv input, #adv select').forEach(el => el.value = '');
+  sorunluFilterActive = false;
+  updateSorunluButton();
   return ara();
 }
 $('#searchBtn').addEventListener('click', ara);
 $('#advSearchBtn').addEventListener('click', ara);
 $('#listBtn').addEventListener('click', listeleHepsi);
+$('#sorunluBtn').addEventListener('click', () => {
+  sorunluFilterActive = !sorunluFilterActive;
+  ara();
+});
 ['#q', '#fPlaka', '#fDriver', '#fNot'].forEach(s => $(s).addEventListener('keydown', e => { if (e.key === 'Enter') ara(); }));
 
 $('#advBtn').addEventListener('click', () => {
