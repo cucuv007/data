@@ -1,165 +1,196 @@
 <!DOCTYPE html>
 <html lang="tr">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0f5f73">
-<title>Evrak Kontrol</title>
-<script>
-/* Oturum yoksa giriş sayfasına yönlendir */
-(function () {
-  var s = null;
-  [localStorage, sessionStorage].forEach(function (st) {
-    try { var v = JSON.parse(st.getItem('evrak-oturum') || 'null'); if (v && Date.now() < v.exp) s = v; } catch (e) {}
-  });
-  if (!s) location.replace('login.html');
-})();
-</script>
-<link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f5f73">
+  <title>Evrak Kontrol</title>
+  <script>
+    (function () {
+      var s = null;
+      [localStorage, sessionStorage].forEach(function (st) {
+        try { var v = JSON.parse(st.getItem('evrak-oturum') || 'null'); if (v && Date.now() < v.exp) s = v; } catch (e) { }
+      });
+      if (!s) location.replace('login.html');
+      else {
+        localStorage.removeItem('evrak-oturum');
+        sessionStorage.removeItem('evrak-oturum');
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="style.css">
 </head>
+
 <body>
 
-<header class="top">
-  <div class="top-row">
-    <h1>Evrak Kontrol</h1>
-    <div class="top-right">
-      <span id="count" class="count"></span>
-      <button id="logoutBtn" class="link" type="button">Çıkış</button>
+  <header class="top">
+    <div class="top-row">
+      <h1>Evrak Kontrol</h1>
+      <div class="top-right">
+        <span id="count" class="count"></span>
+        <button id="logoutBtn" class="link" type="button">Çıkış</button>
+      </div>
     </div>
-  </div>
-  <div class="tools">
-    <input id="q" type="search" placeholder="Genel arama (plaka, sürücü, kurul)" autocomplete="off">
-    <button id="searchBtn" class="btn primary" type="button">Ara</button>
-    <button id="listBtn" class="btn ghost" type="button">Listele</button>
-    <button id="advBtn" class="btn ghost" type="button" aria-expanded="false" aria-controls="adv">Detaylı arama<span id="advBadge" class="badge" hidden></span></button>
-  </div>
-
-  <section id="adv" class="adv" hidden>
-    <div class="adv-grid">
-      <label class="field"><span>Plaka</span><input id="fPlaka" autocapitalize="characters" placeholder="07 ABC"></label>
-      <label class="field"><span>Sürücü</span><input id="fDriver"></label>
-      <label class="field"><span>Kurul</span><select id="kurulFilter"></select></label>
-      <label class="field wide"><span>Not içinde ara</span><input id="fNot" type="search" placeholder="Notlarda geçen kelime"></label>
-      <label class="field"><span>Tarih (başlangıç)</span><input id="fFrom" type="date"></label>
-      <label class="field"><span>Tarih (bitiş)</span><input id="fTo" type="date"></label>
-      <label class="field"><span>HTT</span>
-        <select id="fHtt"><option value="">Tümü</option><option value="var">Yüklü</option><option value="yok">Eksik</option></select></label>
-      <label class="field"><span>Fatura</span>
-        <select id="fFatura"><option value="">Tümü</option><option value="var">Yüklü</option><option value="yok">Eksik</option></select></label>
+    <div class="tools">
+      <input id="q" type="search" placeholder="Genel arama (plaka, sürücü, kurul)" autocomplete="off">
+      <button id="searchBtn" class="btn primary" type="button">Ara</button>
+      <button id="listBtn" class="btn ghost" type="button">Listele</button>
+      <button id="advBtn" class="btn ghost" type="button" aria-expanded="false" aria-controls="adv">Detaylı arama<span
+          id="advBadge" class="badge" hidden></span></button>
     </div>
-    <div class="adv-foot">
-      <button id="clearBtn" class="btn ghost" type="button">Temizle</button>
-      <button id="advSearchBtn" class="btn primary" type="button">Ara</button>
+
+    <section id="adv" class="adv" hidden>
+      <div class="adv-grid">
+        <label class="field"><span>Plaka</span><input id="fPlaka" autocapitalize="characters"
+            placeholder="07 ABC"></label>
+        <label class="field"><span>Sürücü</span><input id="fDriver"></label>
+        <label class="field"><span>Kurul</span><select id="kurulFilter"></select></label>
+        <label class="field wide"><span>Not içinde ara</span><input id="fNot" type="search"
+            placeholder="Notlarda geçen kelime"></label>
+        <label class="field"><span>Tarih (başlangıç)</span><input id="fFrom" type="date"></label>
+        <label class="field"><span>Tarih (bitiş)</span><input id="fTo" type="date"></label>
+        <label class="field"><span>HTT</span>
+          <select id="fHtt">
+            <option value="">Tümü</option>
+            <option value="var">Yüklü</option>
+            <option value="yok">Eksik</option>
+          </select></label>
+        <label class="field"><span>Fatura</span>
+          <select id="fFatura">
+            <option value="">Tümü</option>
+            <option value="var">Yüklü</option>
+            <option value="yok">Eksik</option>
+          </select></label>
+      </div>
+      <div class="adv-foot">
+        <button id="clearBtn" class="btn ghost" type="button">Temizle</button>
+        <button id="advSearchBtn" class="btn primary" type="button">Ara</button>
+      </div>
+    </section>
+  </header>
+
+  <main>
+    <div class="table-wrap">
+      <table id="grid">
+        <thead>
+          <tr>
+            <th>Plaka</th>
+            <th>Tarih</th>
+            <th>Kurul</th>
+            <th>Sürücü</th>
+            <th>Not</th>
+            <th>HTT</th>
+            <th>Fatura</th>
+            <th>İşlem</th>
+          </tr>
+        </thead>
+        <tbody id="list"></tbody>
+      </table>
     </div>
-  </section>
-</header>
+    <p id="empty" class="empty" hidden></p>
+  </main>
 
-<main>
-  <div class="table-wrap">
-    <table id="grid">
-      <thead><tr><th>Plaka</th><th>Tarih</th><th>Kurul</th><th>Sürücü</th><th>Not</th><th>HTT</th><th>Fatura</th><th>İşlem</th></tr></thead>
-      <tbody id="list"></tbody>
-    </table>
-  </div>
-  <p id="empty" class="empty" hidden></p>
-</main>
+  <button id="addBtn" class="fab" aria-label="Yeni kayıt ekle">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4"
+      stroke-linecap="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+    <span>Yeni kayıt</span>
+  </button>
 
-<button id="addBtn" class="fab" aria-label="Yeni kayıt ekle">
-  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-  <span>Yeni kayıt</span>
-</button>
+  <!-- Ekle / Düzenle -->
+  <dialog id="formDlg" class="sheet">
+    <form id="form" autocomplete="off">
+      <div class="sheet-head">
+        <h2 id="formTitle">Yeni kayıt</h2>
+        <button type="button" class="icon" data-close aria-label="Kapat">✕</button>
+      </div>
 
-<!-- Ekle / Düzenle -->
-<dialog id="formDlg" class="sheet">
-  <form id="form" autocomplete="off">
+      <div class="sheet-body">
+        <label class="field">
+          <span>Kurul</span>
+          <input name="kurul" list="kurulList" required>
+          <datalist id="kurulList"></datalist>
+        </label>
+
+        <div class="grid2">
+          <label class="field">
+            <span>Plaka</span>
+            <input name="plaka" required autocapitalize="characters" placeholder="07 ABC 123">
+          </label>
+          <label class="field">
+            <span>Tarih</span>
+            <input name="tarih" type="date" required>
+          </label>
+        </div>
+
+        <label class="field">
+          <span>Sürücü</span>
+          <input name="driver" required>
+        </label>
+
+        <label class="field">
+          <span>Not</span>
+          <textarea name="not" rows="2"></textarea>
+        </label>
+
+        <div class="file" data-key="htt">
+          <span class="label">HTT</span>
+          <div class="file-box">
+            <span class="file-name">Dosya seçilmedi</span>
+            <button type="button" class="link" data-view>Görüntüle</button>
+            <button type="button" class="link danger" data-remove>Kaldır</button>
+          </div>
+          <label class="btn ghost">PDF veya resim seç
+            <input type="file" accept="application/pdf,image/*" hidden>
+          </label>
+        </div>
+
+        <div class="file" data-key="fatura">
+          <span class="label">Fatura</span>
+          <div class="file-box">
+            <span class="file-name">Dosya seçilmedi</span>
+            <button type="button" class="link" data-view>Görüntüle</button>
+            <button type="button" class="link danger" data-remove>Kaldır</button>
+          </div>
+          <label class="btn ghost">PDF veya resim seç
+            <input type="file" accept="application/pdf,image/*" hidden>
+          </label>
+        </div>
+      </div>
+
+      <div class="sheet-foot">
+        <button type="button" class="btn ghost" data-close>Vazgeç</button>
+        <button type="submit" class="btn primary">Kaydet</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Dosya görüntüleyici -->
+  <dialog id="viewDlg" class="viewer">
     <div class="sheet-head">
-      <h2 id="formTitle">Yeni kayıt</h2>
-      <button type="button" class="icon" data-close aria-label="Kapat">✕</button>
-    </div>
-
-    <div class="sheet-body">
-      <label class="field">
-        <span>Kurul</span>
-        <input name="kurul" list="kurulList" required>
-        <datalist id="kurulList"></datalist>
-      </label>
-
-      <div class="grid2">
-        <label class="field">
-          <span>Plaka</span>
-          <input name="plaka" required autocapitalize="characters" placeholder="07 ABC 123">
-        </label>
-        <label class="field">
-          <span>Tarih</span>
-          <input name="tarih" type="date" required>
-        </label>
-      </div>
-
-      <label class="field">
-        <span>Sürücü</span>
-        <input name="driver" required>
-      </label>
-
-      <label class="field">
-        <span>Not</span>
-        <textarea name="not" rows="2"></textarea>
-      </label>
-
-      <div class="file" data-key="htt">
-        <span class="label">HTT</span>
-        <div class="file-box">
-          <span class="file-name">Dosya seçilmedi</span>
-          <button type="button" class="link" data-view>Görüntüle</button>
-          <button type="button" class="link danger" data-remove>Kaldır</button>
-        </div>
-        <label class="btn ghost">PDF veya resim seç
-          <input type="file" accept="application/pdf,image/*" hidden>
-        </label>
-      </div>
-
-      <div class="file" data-key="fatura">
-        <span class="label">Fatura</span>
-        <div class="file-box">
-          <span class="file-name">Dosya seçilmedi</span>
-          <button type="button" class="link" data-view>Görüntüle</button>
-          <button type="button" class="link danger" data-remove>Kaldır</button>
-        </div>
-        <label class="btn ghost">PDF veya resim seç
-          <input type="file" accept="application/pdf,image/*" hidden>
-        </label>
+      <h2 id="viewTitle">Belge</h2>
+      <div class="head-actions">
+        <a id="viewOpen" class="link" target="_blank" rel="noopener">Yeni sekmede aç</a>
+        <button type="button" class="icon" data-close aria-label="Kapat">✕</button>
       </div>
     </div>
+    <div id="viewBody" class="view-body"></div>
+  </dialog>
 
-    <div class="sheet-foot">
-      <button type="button" class="btn ghost" data-close>Vazgeç</button>
-      <button type="submit" class="btn primary">Kaydet</button>
-    </div>
-  </form>
-</dialog>
-
-<!-- Dosya görüntüleyici -->
-<dialog id="viewDlg" class="viewer">
-  <div class="sheet-head">
-    <h2 id="viewTitle">Belge</h2>
-    <div class="head-actions">
-      <a id="viewOpen" class="link" target="_blank" rel="noopener">Yeni sekmede aç</a>
-      <button type="button" class="icon" data-close aria-label="Kapat">✕</button>
-    </div>
+  <!-- Sağ tık menüsü -->
+  <div id="ctx" class="ctx" role="menu" hidden>
+    <button role="menuitem" data-ctx="htt">HTT'yi göster</button>
+    <button role="menuitem" data-ctx="fatura">Faturayı göster</button>
+    <hr>
+    <button role="menuitem" data-ctx="edit">Düzenle</button>
+    <button role="menuitem" data-ctx="del" class="danger">Sil</button>
   </div>
-  <div id="viewBody" class="view-body"></div>
-</dialog>
 
-<!-- Sağ tık menüsü -->
-<div id="ctx" class="ctx" role="menu" hidden>
-  <button role="menuitem" data-ctx="htt">HTT'yi göster</button>
-  <button role="menuitem" data-ctx="fatura">Faturayı göster</button>
-  <hr>
-  <button role="menuitem" data-ctx="edit">Düzenle</button>
-  <button role="menuitem" data-ctx="del" class="danger">Sil</button>
-</div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-<div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-<script src="app.js"></script>
+  <script src="app.js"></script>
 </body>
+
 </html>

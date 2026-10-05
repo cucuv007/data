@@ -1,44 +1,107 @@
-/* Evrak Kontrol
-   Alanlar: kurul, plaka, tarih, driver, not, htt (dosya), fatura (dosya)
-   Veriler tarayıcıdaki IndexedDB'de tutulur. Sunucuya/SQL'e bağlarken
-   yalnızca aşağıdaki "Veri katmanı" bölümünü değiştirmeniz yeterli. */
+const SUPABASE_URL = 'https://rcvyytkxcgmydkcicxdz.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_GpnawTaymipKiC-n4HEUcw_D5_eyEgT';
+const TABLE_NAME = 'Tespit';
+const STORAGE_BUCKET = 'evrak_files';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-/* ---------- Veri katmanı (IndexedDB) ---------- */
+/* ---------- Veri katmanı (Supabase) ---------- */
 const DB = {
-  _db: null,
-  open() {
-    return new Promise((res, rej) => {
-      const r = indexedDB.open('evrak-kontrol', 1);
-      r.onupgradeneeded = () => r.result.createObjectStore('kayitlar', { keyPath: 'id', autoIncrement: true });
-      r.onsuccess = () => { this._db = r.result; res(); };
-      r.onerror = () => rej(r.error);
-    });
+  async req(path, method = 'GET', body = null) {
+    const opts = {
+      method,
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Prefer': 'return=representation'
+      }
+    };
+    if (body) {
+      opts.headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    const res = await fetch(`${SUPABASE_URL}${path}`, opts);
+    if (!res.ok) throw new Error(await res.text());
+    if (method === 'DELETE' || res.status === 204) return null;
+    return await res.json();
   },
-  _tx(mode, fn) {
-    return new Promise((res, rej) => {
-      const tx = this._db.transaction('kayitlar', mode);
-      const req = fn(tx.objectStore('kayitlar'));
-      tx.oncomplete = () => res(req.result);
-      tx.onerror = () => rej(tx.error);
-    });
+  async all() { 
+    return this.req(`/rest/v1/${TABLE_NAME}?select=*&order=id.desc`); 
   },
-  all()      { return this._tx('readonly',  s => s.getAll()); },
-  save(rec)  { return this._tx('readwrite', s => s.put(rec)); },   // id varsa günceller
-  remove(id) { return this._tx('readwrite', s => s.delete(id)); }
+  async save(rec) {
+    // Mükerrer kontrolü (kurul, tarih, plaka)
+    if (!rec.id) {
+      const dup = await this.req(`/rest/v1/${TABLE_NAME}?kurul=eq.${encodeURIComponent(rec.kurul)}&tarih=eq.${encodeURIComponent(rec.tarih)}&plaka=eq.${encodeURIComponent(rec.plaka)}&select=id`);
+      if (dup && dup.length > 0) throw new Error('Bu Kurul, Tarih ve Plaka ile daha önce bir kayıt girilmiş (Mükerrer Kayıt).');
+    }
+
+    if (rec.id) {
+      const { id, ...data } = rec;
+      return this.req(`/rest/v1/${TABLE_NAME}?id=eq.${id}`, 'PATCH', data);
+    } else {
+      return this.req(`/rest/v1/${TABLE_NAME}`, 'POST', rec);
+    }
+  },
+  async remove(id) {
+    return this.req(`/rest/v1/${TABLE_NAME}?id=eq.${id}`, 'DELETE');
+  }
 };
+
+/* ---------- Dosya Sıkıştırma ve Yükleme ---------- */
+async function compressImage(file, maxDim = 1200) {
+  if (file.type === 'application/pdf') return file; // PDF'ler sıkıştırılmaz
+  return new Promise(res => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const ratio = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => res(new File([blob], file.name, { type: 'image/jpeg' })), 'image/jpeg', 0.8);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadFile(file) {
+  const comp = await compressImage(file);
+  const ext = comp.name.split('.').pop() || 'jpg';
+  const fileName = Date.now() + '_' + Math.random().toString(36).substr(2, 5) + '.' + ext;
+  
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${fileName}`, {
+    method: 'POST',
+    headers: {
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': comp.type || 'application/octet-stream'
+    },
+    body: comp
+  });
+  if (!res.ok) throw new Error('Dosya yüklenemedi. Evrak_files bucketı var mı?');
+  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${fileName}`;
+}
 
 /* ---------- Durum ---------- */
 let records = [];
-let editing = null;           // düzenlenen kayıt (yeni ise null)
-let files = { htt: null, fatura: null };
+let editing = null;
+let files = { htt: [], fatura: [] };
 let viewUrl = null;
 
 /* ---------- Liste ---------- */
-let applied = {};   // "Listele" ile uygulanan filtreler
+let applied = {};
 const tr = s => String(s ?? '').toLocaleLowerCase('tr');
 const plakaKey = s => tr(s).replace(/\s+/g, '');
 
@@ -64,10 +127,7 @@ function matches(r, f) {
 const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
 
 function render() {
-  const rows = records
-    .filter(r => matches(r, applied))
-    .sort((a, b) => (b.tarih || '').localeCompare(a.tarih || '') || b.id - a.id);
-
+  const rows = records.filter(r => matches(r, applied));
   $('#count').textContent = `${rows.length} kayıt`;
   $('#list').innerHTML = rows.map(r => `
     <tr data-id="${r.id}">
@@ -76,8 +136,8 @@ function render() {
       <td class="kurul">${esc(r.kurul)}</td>
       <td class="driver">${esc(r.driver)}</td>
       <td class="note" title="${esc(r.not)}">${esc(r.not)}</td>
-      <td class="htt">${docChip('htt', 'HTT', r.htt)}</td>
-      <td class="fatura">${docChip('fatura', 'Fatura', r.fatura)}</td>
+      <td class="htt">${docChip('htt', r.htt)}</td>
+      <td class="fatura">${docChip('fatura', r.fatura)}</td>
       <td class="act">
         <button class="btn ghost small" data-act="edit">Düzenle</button>
         <button class="btn ghost small danger" data-act="del">Sil</button>
@@ -85,16 +145,20 @@ function render() {
     </tr>`).join('');
 
   $('#grid').hidden = rows.length === 0;
-  const empty = $('#empty');
-  empty.hidden = rows.length > 0;
-  empty.textContent = records.length ? 'Aramanızla eşleşen kayıt yok.' : 'Henüz kayıt yok. “Yeni kayıt” ile ilk evrakı ekleyin.';
-
+  $('#empty').hidden = rows.length > 0;
+  $('#empty').textContent = records.length ? 'Aramanızla eşleşen kayıt yok.' : 'Henüz kayıt yok. “Yeni kayıt” ile ilk evrakı ekleyin.';
   refreshKurulLists();
 }
 
-const docChip = (key, label, f) => f
-  ? `<button class="doc has" data-act="view" data-key="${key}">${label} · Göster</button>`
-  : `<span class="doc none">${label} yok</span>`;
+function docChip(key, jsonStr) {
+  try {
+    const arr = JSON.parse(jsonStr || '[]');
+    if (arr && arr.length > 0) {
+      return `<button class="doc has" data-act="view" data-key="${key}">${arr.length} Dosya</button>`;
+    }
+  } catch(e) {}
+  return `<span class="doc none">Yok</span>`;
+}
 
 function refreshKurulLists() {
   const kurullar = [...new Set(records.map(r => r.kurul).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'tr'));
@@ -112,71 +176,114 @@ function openForm(rec = null) {
   $('#formTitle').textContent = rec ? 'Kaydı düzenle' : 'Yeni kayıt';
   ['kurul', 'plaka', 'tarih', 'driver', 'not'].forEach(k => f.elements[k].value = rec?.[k] ?? '');
   if (!rec) f.elements.tarih.value = new Date().toISOString().slice(0, 10);
-  files = { htt: rec?.htt ?? null, fatura: rec?.fatura ?? null };
+  
+  files = { htt: [], fatura: [] };
+  if (rec) {
+    try { files.htt = rec.htt ? JSON.parse(rec.htt).map(u => ({ url: u, name: u.split('/').pop() })) : []; } catch(e){}
+    try { files.fatura = rec.fatura ? JSON.parse(rec.fatura).map(u => ({ url: u, name: u.split('/').pop() })) : []; } catch(e){}
+  }
   syncFileBoxes();
   $('#formDlg').showModal();
 }
 
 function syncFileBoxes() {
   $$('.file').forEach(box => {
-    const f = files[box.dataset.key];
-    box.classList.toggle('has', !!f);
-    $('.file-name', box).textContent = f ? f.name : 'Dosya seçilmedi';
+    const key = box.dataset.key;
+    const fs = files[key];
+    box.classList.toggle('has', fs.length > 0);
+    const boxInner = $('.file-box', box);
+    
+    if (fs.length > 0) {
+      boxInner.innerHTML = fs.map((f, i) => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;background:var(--line);padding:4px 8px;border-radius:4px;">
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;">${esc(f.name)}</span>
+          ${f.url ? `<a href="${f.url}" target="_blank" class="link small">Aç</a>` : ''}
+          <button type="button" class="link danger small" data-remove-idx="${i}">Sil</button>
+        </div>
+      `).join('');
+    } else {
+      boxInner.innerHTML = `<span class="file-name">Dosya seçilmedi</span>`;
+    }
+
+    $$('[data-remove-idx]', box).forEach(btn => {
+       btn.onclick = (e) => {
+         e.preventDefault();
+         files[key].splice(btn.dataset.removeIdx, 1);
+         syncFileBoxes();
+       };
+    });
   });
 }
 
 $$('.file').forEach(box => {
   const key = box.dataset.key, input = $('input[type=file]', box);
   input.addEventListener('change', () => {
-    const file = input.files[0];
-    if (!file) return;
-    files[key] = { name: file.name, type: file.type, blob: file };
+    for (const file of input.files) {
+      files[key].push({ name: file.name, type: file.type, blob: file });
+    }
     input.value = '';
     syncFileBoxes();
   });
-  $('[data-remove]', box).addEventListener('click', () => { files[key] = null; syncFileBoxes(); });
-  $('[data-view]', box).addEventListener('click', () => showFile(files[key], key === 'htt' ? 'HTT' : 'Fatura'));
 });
 
 $('#form').addEventListener('submit', async e => {
   e.preventDefault();
   const f = e.target.elements;
-  const rec = {
-    ...(editing || {}),
-    kurul: f.kurul.value.trim(),
-    plaka: f.plaka.value.trim().toLocaleUpperCase('tr'),
-    tarih: f.tarih.value,
-    driver: f.driver.value.trim(),
-    not: f.not.value.trim(),
-    htt: files.htt,
-    fatura: files.fatura
-  };
+  const btn = $('button[type=submit]', e.target);
+  btn.disabled = true;
+  btn.textContent = 'Kaydediliyor...';
+  
   try {
+    const rec = {
+      ...(editing || {}),
+      kurul: f.kurul.value.trim(),
+      plaka: f.plaka.value.trim().toLocaleUpperCase('tr'),
+      tarih: f.tarih.value,
+      driver: f.driver.value.trim(),
+      not: f.not.value.trim()
+    };
+
+    // Dosyaları yükle
+    for (const key of ['htt', 'fatura']) {
+      let urls = [];
+      for (const item of files[key]) {
+        if (item.url) urls.push(item.url);
+        else if (item.blob) urls.push(await uploadFile(item.blob));
+      }
+      rec[key] = JSON.stringify(urls);
+    }
+
     await DB.save(rec);
     records = await DB.all();
     $('#formDlg').close();
     render();
     toast(editing ? 'Kayıt güncellendi' : 'Kayıt eklendi');
   } catch (err) {
-    toast('Kaydedilemedi. Depolama alanı dolu olabilir.');
+    toast(err.message || 'Kaydedilemedi.');
     console.error(err);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Kaydet';
   }
 });
 
 /* ---------- Görüntüleyici ---------- */
-function showFile(f, title) {
-  if (!f) return;
-  closeViewUrl();
-  viewUrl = URL.createObjectURL(f.blob);
-  $('#viewTitle').textContent = `${title} · ${f.name}`;
-  $('#viewOpen').href = viewUrl;
-  $('#viewBody').innerHTML = f.type === 'application/pdf'
-    ? `<iframe src="${viewUrl}" title="${esc(f.name)}"></iframe>`
-    : `<img src="${viewUrl}" alt="${esc(f.name)}">`;
-  $('#viewDlg').showModal();
+function showFile(jsonStr, title) {
+  try {
+    const arr = JSON.parse(jsonStr || '[]');
+    if (!arr || arr.length === 0) return;
+    $('#viewTitle').textContent = `${title} (${arr.length} dosya)`;
+    $('#viewBody').innerHTML = arr.map(url => {
+      const isPdf = url.toLowerCase().includes('.pdf');
+      return `<div style="margin-bottom:15px; border-bottom:1px solid var(--line); padding-bottom:10px;">
+        <a href="${url}" target="_blank" class="link" style="display:block;margin-bottom:5px;">Tam ekran aç</a>
+        ${isPdf ? `<iframe src="${url}" style="width:100%;height:400px;border:none;"></iframe>` : `<img src="${url}" style="max-width:100%;">`}
+      </div>`;
+    }).join('');
+    $('#viewDlg').showModal();
+  } catch(e) {}
 }
-function closeViewUrl() { if (viewUrl) { URL.revokeObjectURL(viewUrl); viewUrl = null; } }
-$('#viewDlg').addEventListener('close', () => { $('#viewBody').innerHTML = ''; closeViewUrl(); });
+$('#viewDlg').addEventListener('close', () => { $('#viewBody').innerHTML = ''; });
 
 /* ---------- Olaylar ---------- */
 const docTitle = key => key === 'htt' ? 'HTT' : 'Fatura';
@@ -184,10 +291,12 @@ const recOf = tr => records.find(r => r.id === +tr.dataset.id);
 
 async function deleteRec(rec) {
   if (!confirm(`${rec.plaka} plakalı kayıt silinsin mi?`)) return;
-  await DB.remove(rec.id);
-  records = await DB.all();
-  render();
-  toast('Kayıt silindi');
+  try {
+    await DB.remove(rec.id);
+    records = await DB.all();
+    render();
+    toast('Kayıt silindi');
+  } catch(e) { toast('Silinemedi.'); }
 }
 
 $('#list').addEventListener('click', e => {
@@ -201,7 +310,6 @@ $('#list').addEventListener('click', e => {
   if (act === 'del') deleteRec(rec);
 });
 
-/* Ara: girilen filtreleri uygular */
 async function ara() {
   applied = readFilters();
   const n = ['plaka', 'driver', 'kurul', 'not', 'from', 'to', 'htt', 'fatura'].filter(k => applied[k]).length;
@@ -210,7 +318,6 @@ async function ara() {
   records = await DB.all();
   render();
 }
-/* Listele: filtreleri temizleyip tüm kayıtları getirir */
 function listeleHepsi() {
   $('#q').value = '';
   $$('#adv input, #adv select').forEach(el => el.value = '');
@@ -231,14 +338,13 @@ $('#clearBtn').addEventListener('click', listeleHepsi);
 /* Sağ tık (telefonda basılı tutma) menüsü */
 const ctx = $('#ctx');
 let ctxRec = null, pressTimer;
-
 function openCtx(tr, x, y) {
   ctxRec = recOf(tr);
   if (!ctxRec) return;
   $$('#list tr.sel').forEach(t => t.classList.remove('sel'));
   tr.classList.add('sel');
-  $('[data-ctx=htt]', ctx).disabled = !ctxRec.htt;
-  $('[data-ctx=fatura]', ctx).disabled = !ctxRec.fatura;
+  $('[data-ctx=htt]', ctx).disabled = !ctxRec.htt || ctxRec.htt === '[]';
+  $('[data-ctx=fatura]', ctx).disabled = !ctxRec.fatura || ctxRec.fatura === '[]';
   ctx.hidden = false;
   const w = ctx.offsetWidth, h = ctx.offsetHeight;
   ctx.style.left = Math.max(8, Math.min(x, innerWidth - w - 8)) + 'px';
@@ -276,7 +382,7 @@ addEventListener('resize', closeCtx);
 
 $('#addBtn').addEventListener('click', () => openForm());
 $$('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
-$$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); })); // dışına dokununca kapat
+$$('dialog').forEach(d => d.addEventListener('click', e => { if (e.target === d) d.close(); }));
 
 let toastTimer;
 function toast(msg) {
@@ -287,12 +393,10 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-/* ---------- Çıkış ---------- */
 $('#logoutBtn').addEventListener('click', () => {
   localStorage.removeItem('evrak-oturum');
   sessionStorage.removeItem('evrak-oturum');
   location.replace('login.html');
 });
 
-/* ---------- Başlat ---------- */
-DB.open().then(DB.all.bind(DB)).then(rows => { records = rows; render(); });
+DB.all().then(rows => { records = rows; render(); }).catch(e => toast('Veriler yüklenemedi.'));
