@@ -220,12 +220,6 @@ function openForm(rec = null) {
   setSaveStatus('', 'info');
   ['kurul', 'plaka', 'tarih', 'driver', 'not'].forEach(k => f.elements[k].value = rec?.[k] ?? '');
   if (!rec) f.elements.tarih.value = new Date().toISOString().slice(0, 10);
-  if (!rec && !f.elements.durum) {
-    const statusWrap = document.createElement('div');
-    statusWrap.className = 'field';
-    statusWrap.innerHTML = '<span>Durum</span><label class="toggle-row"><input type="checkbox" name="durum"> Sorunlu değil</label>';
-    f.insertBefore(statusWrap, f.querySelector('.file[data-key="htt"]'));
-  }
   if (f.elements.durum) f.elements.durum.checked = normalizeBool(rec?.durum ?? false);
   
   files = { htt: [], fatura: [] };

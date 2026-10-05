@@ -244,6 +244,8 @@ dialog::backdrop { background: rgba(8,16,20,.55); }
   padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--line);
 }
+.toggle-row { display: inline-flex; align-items: center; gap: 10px; min-height: 46px; color: var(--ink); }
+.toggle-row input { width: 18px; height: 18px; min-height: 18px; accent-color: var(--brand); }
 .file .label { font-size: .88rem; font-weight: 600; color: var(--muted); }
 .grid2 { display: grid; grid-template-columns: 1fr; gap: 14px; }
 @media (min-width: 480px) { .grid2 { grid-template-columns: 1fr 1fr; } }
