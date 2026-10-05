@@ -228,7 +228,9 @@ function openForm(rec = null) {
     try { files.fatura = rec.fatura ? JSON.parse(rec.fatura).map(u => ({ url: u, name: u.split('/').pop() })) : []; } catch(e){}
   }
   syncFileBoxes();
-  $('#formDlg').showModal();
+  const formDlg = $('#formDlg');
+  formDlg.setAttribute('open', 'open');
+  formDlg.focus();
 }
 
 function syncFileBoxes() {
@@ -459,12 +461,20 @@ addEventListener('scroll', closeCtx, true);
 addEventListener('resize', closeCtx);
 
 $('#addBtn').addEventListener('click', () => openForm());
-$$('[data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
+$$('[data-close]').forEach(b => b.addEventListener('click', () => {
+  const d = b.closest('dialog');
+  if (d && d.id === 'formDlg') d.removeAttribute('open');
+  else if (d) d.close();
+}));
 $$('dialog').forEach(d => {
-  d.addEventListener('click', e => { if (e.target === d) d.close(); });
+  d.addEventListener('click', e => {
+    const isFormDialog = d.id === 'formDlg';
+    if (!isFormDialog && e.target === d) d.close();
+  });
   d.addEventListener('pointerdown', e => e.stopPropagation());
 });
 $('#form').addEventListener('pointerdown', e => e.stopPropagation());
+$('#formDlg').addEventListener('cancel', e => e.preventDefault());
 $('#formDlg').addEventListener('close', () => setSaveStatus('', 'info'));
 
 let toastTimer;
