@@ -8,19 +8,7 @@
   <title>Evrak Kontrol</title>
   <script>
     (function () {
-      const SESSION_KEY = 'evrak-oturum';
-      try {
-        const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY) || 'null');
-        const valid = saved && saved.exp && Date.now() < saved.exp;
-
-        if (!valid) {
-          window.location.replace('login.html');
-          return;
-        }
-      } catch (e) {
-        window.location.replace('login.html');
-        return;
-      }
+      window.location.replace('login.html');
     })();
   </script>
 

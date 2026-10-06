@@ -133,7 +133,10 @@
       for (const st of [localStorage, sessionStorage]) {
         try {
           const s = JSON.parse(st.getItem(SESSION_KEY) || 'null');
-          if (s && Date.now() < s.exp) return location.replace('index.html');
+          if (s && Date.now() < s.exp) {
+            // Oturum varsa login ekranı gösterme; kullanıcının tekrar giriş yapması zorunlu olsun.
+            return;
+          }
         } catch (e) { }
       }
     })();
