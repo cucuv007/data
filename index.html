@@ -9,22 +9,18 @@
   <script>
     (function () {
       const SESSION_KEY = 'evrak-oturum';
-      const LOGIN_FLOW_KEY = 'evrak-login-flow';
-      try {
-        const saved = JSON.parse(localStorage.getItem(SESSION_KEY) || sessionStorage.getItem(SESSION_KEY) || 'null');
-        const flow = sessionStorage.getItem(LOGIN_FLOW_KEY) === '1';
-        const valid = saved && saved.exp && Date.now() < saved.exp && flow;
+      const ALLOW_INDEX_KEY = 'evrak-allow-index';
+      const allow = sessionStorage.getItem(ALLOW_INDEX_KEY) === '1';
 
-        if (!valid) {
-          sessionStorage.removeItem(LOGIN_FLOW_KEY);
-          window.location.replace('login.html');
-          return;
-        }
-      } catch (e) {
-        sessionStorage.removeItem(LOGIN_FLOW_KEY);
+      if (!allow) {
+        localStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem(ALLOW_INDEX_KEY);
         window.location.replace('login.html');
         return;
       }
+
+      sessionStorage.removeItem(ALLOW_INDEX_KEY);
     })();
   </script>
 

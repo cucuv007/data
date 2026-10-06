@@ -185,7 +185,7 @@
           localStorage.removeItem(SESSION_KEY);
           sessionStorage.removeItem(SESSION_KEY);
           localStorage.setItem(SESSION_KEY, session);
-          sessionStorage.setItem(LOGIN_FLOW_KEY, '1');
+          sessionStorage.setItem('evrak-allow-index', '1');
           location.replace('index.html');
         } else {
           $('#pass').value = '';
