@@ -528,6 +528,10 @@ $('#logoutBtn').addEventListener('click', () => {
 DB.all().then(rows => { records = rows; render(); }).catch(e => toast('Veriler yüklenemedi.'));
 
 /* ---------- Dışa Aktarma ---------- */
+function normalizePdfText(value) {
+  return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[ıİ]/g, ch => ch === 'ı' ? 'i' : 'I');
+}
+
 function exportRowsToExcel() {
   const rows = records.filter(r => matches(r, applied));
   if (!rows.length) {
@@ -547,11 +551,7 @@ function exportRowsToExcel() {
     Kurul: r.kurul || '',
     'Sürücü': r.driver || '',
     Not: r.not || '',
-    Durum: normalizeBool(r.durum) ? 'Sorunlu' : 'Normal',
-    'HTT Durumu': r.htt ? 'Var' : 'Yok',
-    'Fatura Durumu': r.fatura ? 'Var' : 'Yok',
-    'HTT Linkleri': r.htt || '',
-    'Fatura Linkleri': r.fatura || ''
+    Durum: normalizeBool(r.durum) ? 'Sorunlu' : 'Normal'
   }));
 
   const ws = XLSX.utils.json_to_sheet(sheetData);
@@ -577,18 +577,18 @@ function exportRowsToPdf() {
   const doc = new jsPDF({ orientation: 'landscape' });
 
   const data = rows.map(r => [
-    r.plaka || '',
-    fmtDate(r.tarih),
-    r.kurul || '',
-    r.driver || ''
+    normalizePdfText(r.plaka || ''),
+    normalizePdfText(fmtDate(r.tarih)),
+    normalizePdfText(r.kurul || ''),
+    normalizePdfText(r.driver || '')
   ]);
 
   doc.setFontSize(14);
-  doc.text('Evrak Kontrol - Kayıt Listesi', 14, 14);
+  doc.text(normalizePdfText('Evrak Kontrol - Kayıt Listesi'), 14, 14);
 
   if (typeof doc.autoTable === 'function') {
     doc.autoTable({
-      head: [['Plaka', 'Tarih', 'Kurul', 'Sürücü']],
+      head: [[normalizePdfText('Plaka'), normalizePdfText('Tarih'), normalizePdfText('Kurul'), normalizePdfText('Sürücü')]],
       body: data,
       startY: 22,
       styles: { fontSize: 8 },
@@ -598,10 +598,10 @@ function exportRowsToPdf() {
   } else {
     let y = 26;
     doc.setFontSize(9);
-    doc.text('Plaka', 10, y);
-    doc.text('Tarih', 55, y);
-    doc.text('Kurul', 95, y);
-    doc.text('Sürücü', 150, y);
+    doc.text(normalizePdfText('Plaka'), 10, y);
+    doc.text(normalizePdfText('Tarih'), 55, y);
+    doc.text(normalizePdfText('Kurul'), 95, y);
+    doc.text(normalizePdfText('Sürücü'), 150, y);
     y += 7;
 
     rows.forEach(r => {
@@ -609,10 +609,10 @@ function exportRowsToPdf() {
         doc.addPage();
         y = 20;
       }
-      doc.text(String(r.plaka || ''), 10, y);
-      doc.text(fmtDate(r.tarih), 55, y);
-      doc.text(String(r.kurul || ''), 95, y);
-      doc.text(String(r.driver || ''), 150, y);
+      doc.text(normalizePdfText(r.plaka || ''), 10, y);
+      doc.text(normalizePdfText(fmtDate(r.tarih)), 55, y);
+      doc.text(normalizePdfText(r.kurul || ''), 95, y);
+      doc.text(normalizePdfText(r.driver || ''), 150, y);
       y += 7;
     });
   }
