@@ -287,6 +287,165 @@ function syncFileBoxes() {
   });
 }
 
+/* ---------- Otomatik Yükleme (Klasörden) ---------- */
+async function pickDirectoryFallbackAndProcess() {
+  // Fallback using webkitdirectory input
+  const input = $('#dirPickerFallback');
+  return new Promise(res => {
+    input.onchange = async () => {
+      const files = [...input.files];
+      await processPickedFiles(files, /*rootName*/ null);
+      input.value = '';
+      res();
+    };
+    input.click();
+  });
+}
+
+async function pickDirectoryAndProcess() {
+  // Prefer File System Access API if available
+  if (window.showDirectoryPicker) {
+    try {
+      const dir = await window.showDirectoryPicker();
+      const files = [];
+      async function recurse(d, prefix = '') {
+        for await (const [name, handle] of d.entries()) {
+          if (handle.kind === 'file') {
+            const f = await handle.getFile();
+            // emulate webkitRelativePath by prefixing folder name(s)
+            Object.defineProperty(f, 'webkitRelativePath', { value: prefix ? (prefix + '/' + name) : name, configurable: true });
+            files.push(f);
+          } else if (handle.kind === 'directory') {
+            await recurse(handle, prefix ? (prefix + '/' + name) : name);
+          }
+        }
+      }
+      await recurse(dir);
+      await processPickedFiles(files, dir.name);
+    } catch (e) {
+      console.error(e);
+      // fallback
+      await pickDirectoryFallbackAndProcess();
+    }
+  } else {
+    await pickDirectoryFallbackAndProcess();
+  }
+}
+
+async function processPickedFiles(files, rootName) {
+  if (!files || files.length === 0) return;
+
+  // Determine a candidate name to parse meta from: prefer rootName, else try to infer from path
+  let candidate = rootName || '';
+  if (!candidate) {
+    // try to use parent folder from first file's webkitRelativePath
+    const p = files[0].webkitRelativePath || files[0].name;
+    const parts = (p.indexOf('/') >= 0) ? p.split('/') : [];
+    if (parts.length > 1) candidate = parts[0];
+  }
+  // if still empty, attempt to use directory-like tokens from file name
+  if (!candidate) candidate = files[0].name;
+
+  const meta = parseMetaFromName(candidate);
+
+  // prepare to fill form fields
+  const f = $('#form');
+  if (meta.kurul) f.elements.kurul.value = meta.kurul;
+  if (meta.plaka) f.elements.plaka.value = normalizePlateValue(meta.plaka);
+  if (meta.tarih) {
+    // convert to yyyy-mm-dd if possible
+    const d = parseDateString(meta.tarih);
+    if (d) f.elements.tarih.value = d.toISOString().slice(0,10);
+  }
+  if (meta.driver) f.elements.driver.value = meta.driver;
+
+  // reset file boxes for form (do not upload yet) and fill with detected files
+  const detected = { htt: [], fatura: [] };
+
+  for (const file of files) {
+    const name = file.name || '';
+    const lname = name.toLowerCase();
+    if (lname.endsWith('.txt') && /\bnot\b/i.test(name)) {
+      try {
+        const txt = await file.text();
+        f.elements.not.value = txt;
+      } catch (e) { }
+      continue;
+    }
+    if (lname.endsWith('.pdf')) {
+      if (/\bhtt\b/i.test(name)) {
+        detected.htt.push({ name: name, blob: file });
+        continue;
+      }
+      if (/fatura/i.test(name)) {
+        detected.fatura.push({ name: name, blob: file });
+        continue;
+      }
+    }
+  }
+
+  // attach to global files object used by form
+  files = { htt: detected.htt, fatura: detected.fatura };
+  window.files = files;
+  syncFileBoxes();
+
+  toast('Klasörden veriler dolduruldu (kaydetmek için Kaydet butonuna basın).');
+}
+
+function parseMetaFromName(name) {
+  const out = {};
+  if (!name) return out;
+  const s = name.replace(/[_\[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
+
+  // Kurul: look for 'KURUL' followed by number
+  let m = s.match(/(KURUL)\s*[:\-]?\s*(\d+)/i);
+  if (m) out.kurul = (m[1] + ' ' + m[2]).toUpperCase();
+  else {
+    m = s.match(/(KURUL\s*\d+)/i);
+    if (m) out.kurul = m[1].toUpperCase();
+  }
+
+  // Tarih: dd.mm.yyyy or dd-mm-yyyy
+  m = s.match(/(\d{1,2}[\.\-\/]\d{1,2}[\.\-\/]\d{2,4})/);
+  if (m) out.tarih = m[1];
+
+  // Plaka: letters then digits pattern (1-3 letters + space? + 2-4 digits)
+  m = s.match(/([A-ZÇŞĞÜİÖ]{1,3}\s*\d{2,4})/i);
+  if (m) out.plaka = m[1].toUpperCase();
+
+  // Driver: attempt: sequence of words (at least 2) between plaka and tarih, or capitalized words
+  if (out.plaka && out.tarih) {
+    const idx1 = s.toUpperCase().indexOf(out.plaka.toUpperCase());
+    const idx2 = s.indexOf(out.tarih);
+    if (idx1 >= 0 && idx2 > idx1) {
+      const mid = s.substring(idx1 + out.plaka.length, idx2).replace(/[-_\(\)\[\]]/g, ' ').trim();
+      const words = mid.split(/\s+/).filter(Boolean);
+      if (words.length >= 2) out.driver = words.map(w => capitalizeWord(w)).join(' ');
+    }
+  }
+  // fallback: find sequences of 2-3 capitalized words
+  if (!out.driver) {
+    const wordMatches = s.match(/([A-ZÇŞĞÜİÖ][a-zçşığüö]+(?:\s+[A-ZÇŞĞÜİÖ][a-zçşığüö]+){1,2})/g);
+    if (wordMatches && wordMatches.length) {
+      out.driver = wordMatches[0];
+    }
+  }
+
+  return out;
+}
+
+function capitalizeWord(w) { return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase(); }
+
+function parseDateString(s) {
+  if (!s) return null;
+  const m = s.match(/(\d{1,2})[\.\-\/]?(\d{1,2})[\.\-\/]?(\d{2,4})/);
+  if (!m) return null;
+  let day = parseInt(m[1],10), month = parseInt(m[2],10), year = parseInt(m[3],10);
+  if (year < 100) year += 2000;
+  try { return new Date(year, month-1, day); } catch(e) { return null; }
+}
+
+
 $$('.file').forEach(box => {
   const key = box.dataset.key, input = $('input[type=file]', box);
   input.addEventListener('change', () => {
@@ -494,6 +653,12 @@ addEventListener('scroll', closeCtx, true);
 addEventListener('resize', closeCtx);
 
 $('#addBtn').addEventListener('click', () => openForm());
+// attach auto-load handler
+$('#autoLoadBtn')?.addEventListener('click', async () => {
+  // open form if not already
+  if (!editing) openForm();
+  await pickDirectoryAndProcess();
+});
 $$('[data-close]').forEach(b => b.addEventListener('click', () => {
   const d = b.closest('dialog');
   if (d && d.id === 'formDlg') d.removeAttribute('open');
