@@ -359,9 +359,7 @@ async function processPickedFiles(pickedFiles, rootName) {
   }
   if (meta.driver) f.elements.driver.value = meta.driver;
 
-  // reset file boxes for form (do not upload yet) and fill with detected files
-  const detected = { htt: [], fatura: [] };
-
+  // Only read .txt notes and metadata; DO NOT auto-attach PDFs (HTT/Fatura)
   for (const file of pickedFiles) {
     const name = file.name || '';
     const lname = name.toLowerCase();
@@ -370,26 +368,15 @@ async function processPickedFiles(pickedFiles, rootName) {
         const txt = await file.text();
         f.elements.not.value = txt;
       } catch (e) { }
-      continue;
-    }
-    if (lname.endsWith('.pdf')) {
-      if (/\bhtt\b/i.test(name)) {
-        detected.htt.push({ name: name, blob: file });
-        continue;
-      }
-      if (/fatura/i.test(name)) {
-        detected.fatura.push({ name: name, blob: file });
-        continue;
-      }
     }
   }
 
-  // attach to global files object used by form
-  files = { htt: detected.htt, fatura: detected.fatura };
+  // Ensure PDF lists remain empty so user can add them manually
+  files = { htt: [], fatura: [] };
   window.files = files;
   syncFileBoxes();
 
-  toast('Klasörden veriler dolduruldu (kaydetmek için Kaydet butonuna basın).');
+  toast('Klasörden meta ve notlar dolduruldu. HTT/Fatura dosyalarını manuel ekleyin.');
 }
 
 function parseMetaFromName(name) {
