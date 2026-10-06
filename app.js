@@ -535,6 +535,11 @@ function exportRowsToExcel() {
     return;
   }
 
+  if (!window.XLSX) {
+    toast('Excel kütüphanesi yüklenemedi. Internet bağlantısını kontrol edin.');
+    return;
+  }
+
   const sheetData = rows.map(r => ({
     Plaka: r.plaka || '',
     Tarih: fmtDate(r.tarih),
@@ -560,6 +565,11 @@ function exportRowsToPdf() {
     return;
   }
 
+  if (!window.jspdf || !window.jspdf.jsPDF) {
+    toast('PDF kütüphanesi yüklenemedi. İnternet bağlantısını kontrol edin.');
+    return;
+  }
+
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'landscape' });
 
@@ -575,14 +585,40 @@ function exportRowsToPdf() {
   doc.setFontSize(14);
   doc.text('Evrak Kontrol - Kayıt Listesi', 14, 14);
 
-  doc.autoTable({
-    head: [['Plaka', 'Tarih', 'Kurul', 'Sürücü', 'Not', 'Durum']],
-    body: data,
-    startY: 22,
-    styles: { fontSize: 8 },
-    headStyles: { fillColor: [15, 95, 115] },
-    margin: { left: 10, right: 10 }
-  });
+  if (typeof doc.autoTable === 'function') {
+    doc.autoTable({
+      head: [['Plaka', 'Tarih', 'Kurul', 'Sürücü', 'Not', 'Durum']],
+      body: data,
+      startY: 22,
+      styles: { fontSize: 8 },
+      headStyles: { fillColor: [15, 95, 115] },
+      margin: { left: 10, right: 10 }
+    });
+  } else {
+    let y = 26;
+    doc.setFontSize(9);
+    doc.text('Plaka', 10, y);
+    doc.text('Tarih', 35, y);
+    doc.text('Kurul', 75, y);
+    doc.text('Sürücü', 120, y);
+    doc.text('Not', 160, y);
+    doc.text('Durum', 210, y);
+    y += 7;
+
+    rows.forEach(r => {
+      if (y > 180) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.text(String(r.plaka || ''), 10, y);
+      doc.text(fmtDate(r.tarih), 35, y);
+      doc.text(String(r.kurul || ''), 75, y);
+      doc.text(String(r.driver || ''), 120, y);
+      doc.text(String(r.not || '').slice(0, 25), 160, y);
+      doc.text(normalizeBool(r.durum) ? 'Sorunlu' : 'Normal', 210, y);
+      y += 7;
+    });
+  }
 
   doc.save('evrak-kayitlari.pdf');
   toast('PDF dosyası indirildi.');
