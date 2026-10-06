@@ -6,19 +6,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#0f5f73">
   <title>Evrak Kontrol</title>
-  <script>
-    (function () {
-      var s = null;
-      [localStorage, sessionStorage].forEach(function (st) {
-        try { var v = JSON.parse(st.getItem('evrak-oturum') || 'null'); if (v && Date.now() < v.exp) s = v; } catch (e) { }
-      });
-      if (!s) location.replace('login.html');
-      else {
-        localStorage.removeItem('evrak-oturum');
-        sessionStorage.removeItem('evrak-oturum');
-      }
-    })();
-  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.10.1/jspdf.plugin.autotable.min.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -29,6 +19,8 @@
       <h1>Evrak Kontrol</h1>
       <div class="top-right">
         <span id="count" class="count"></span>
+        <button id="exportExcelBtn" class="btn ghost small" type="button">Excel</button>
+        <button id="exportPdfBtn" class="btn ghost small" type="button">PDF</button>
         <button id="logoutBtn" class="link" type="button">Çıkış</button>
       </div>
     </div>

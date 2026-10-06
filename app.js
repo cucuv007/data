@@ -526,3 +526,67 @@ $('#logoutBtn').addEventListener('click', () => {
 });
 
 DB.all().then(rows => { records = rows; render(); }).catch(e => toast('Veriler yüklenemedi.'));
+
+/* ---------- Dışa Aktarma ---------- */
+function exportRowsToExcel() {
+  const rows = records.filter(r => matches(r, applied));
+  if (!rows.length) {
+    toast('Dışa aktarılacak kayıt bulunamadı.');
+    return;
+  }
+
+  const sheetData = rows.map(r => ({
+    Plaka: r.plaka || '',
+    Tarih: fmtDate(r.tarih),
+    Kurul: r.kurul || '',
+    Sürücü: r.driver || '',
+    Not: r.not || '',
+    Durum: normalizeBool(r.durum) ? 'Sorunlu' : 'Normal',
+    HTT: r.htt ? 'Var' : 'Yok',
+    Fatura: r.fatura ? 'Var' : 'Yok'
+  }));
+
+  const ws = XLSX.utils.json_to_sheet(sheetData);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Kayıtlar');
+  XLSX.writeFile(wb, 'evrak-kayitlari.xlsx');
+  toast('Excel dosyası indirildi.');
+}
+
+function exportRowsToPdf() {
+  const rows = records.filter(r => matches(r, applied));
+  if (!rows.length) {
+    toast('Dışa aktarılacak kayıt bulunamadı.');
+    return;
+  }
+
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape' });
+
+  const data = rows.map(r => [
+    r.plaka || '',
+    fmtDate(r.tarih),
+    r.kurul || '',
+    r.driver || '',
+    r.not || '',
+    normalizeBool(r.durum) ? 'Sorunlu' : 'Normal'
+  ]);
+
+  doc.setFontSize(14);
+  doc.text('Evrak Kontrol - Kayıt Listesi', 14, 14);
+
+  doc.autoTable({
+    head: [['Plaka', 'Tarih', 'Kurul', 'Sürücü', 'Not', 'Durum']],
+    body: data,
+    startY: 22,
+    styles: { fontSize: 8 },
+    headStyles: { fillColor: [15, 95, 115] },
+    margin: { left: 10, right: 10 }
+  });
+
+  doc.save('evrak-kayitlari.pdf');
+  toast('PDF dosyası indirildi.');
+}
+
+$('#exportExcelBtn').addEventListener('click', exportRowsToExcel);
+$('#exportPdfBtn').addEventListener('click', exportRowsToPdf);
