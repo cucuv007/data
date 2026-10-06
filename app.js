@@ -536,19 +536,22 @@ function exportRowsToExcel() {
   }
 
   if (!window.XLSX) {
-    toast('Excel kütüphanesi yüklenemedi. Internet bağlantısını kontrol edin.');
+    toast('Excel kütüphanesi yüklenemedi. İnternet bağlantısını kontrol edin.');
     return;
   }
 
   const sheetData = rows.map(r => ({
+    'Kayıt ID': r.id || '',
     Plaka: r.plaka || '',
     Tarih: fmtDate(r.tarih),
     Kurul: r.kurul || '',
-    Sürücü: r.driver || '',
+    'Sürücü': r.driver || '',
     Not: r.not || '',
     Durum: normalizeBool(r.durum) ? 'Sorunlu' : 'Normal',
-    HTT: r.htt ? 'Var' : 'Yok',
-    Fatura: r.fatura ? 'Var' : 'Yok'
+    'HTT Durumu': r.htt ? 'Var' : 'Yok',
+    'Fatura Durumu': r.fatura ? 'Var' : 'Yok',
+    'HTT Linkleri': r.htt || '',
+    'Fatura Linkleri': r.fatura || ''
   }));
 
   const ws = XLSX.utils.json_to_sheet(sheetData);
@@ -577,9 +580,7 @@ function exportRowsToPdf() {
     r.plaka || '',
     fmtDate(r.tarih),
     r.kurul || '',
-    r.driver || '',
-    r.not || '',
-    normalizeBool(r.durum) ? 'Sorunlu' : 'Normal'
+    r.driver || ''
   ]);
 
   doc.setFontSize(14);
@@ -587,7 +588,7 @@ function exportRowsToPdf() {
 
   if (typeof doc.autoTable === 'function') {
     doc.autoTable({
-      head: [['Plaka', 'Tarih', 'Kurul', 'Sürücü', 'Not', 'Durum']],
+      head: [['Plaka', 'Tarih', 'Kurul', 'Sürücü']],
       body: data,
       startY: 22,
       styles: { fontSize: 8 },
@@ -598,11 +599,9 @@ function exportRowsToPdf() {
     let y = 26;
     doc.setFontSize(9);
     doc.text('Plaka', 10, y);
-    doc.text('Tarih', 35, y);
-    doc.text('Kurul', 75, y);
-    doc.text('Sürücü', 120, y);
-    doc.text('Not', 160, y);
-    doc.text('Durum', 210, y);
+    doc.text('Tarih', 55, y);
+    doc.text('Kurul', 95, y);
+    doc.text('Sürücü', 150, y);
     y += 7;
 
     rows.forEach(r => {
@@ -611,11 +610,9 @@ function exportRowsToPdf() {
         y = 20;
       }
       doc.text(String(r.plaka || ''), 10, y);
-      doc.text(fmtDate(r.tarih), 35, y);
-      doc.text(String(r.kurul || ''), 75, y);
-      doc.text(String(r.driver || ''), 120, y);
-      doc.text(String(r.not || '').slice(0, 25), 160, y);
-      doc.text(normalizeBool(r.durum) ? 'Sorunlu' : 'Normal', 210, y);
+      doc.text(fmtDate(r.tarih), 55, y);
+      doc.text(String(r.kurul || ''), 95, y);
+      doc.text(String(r.driver || ''), 150, y);
       y += 7;
     });
   }
