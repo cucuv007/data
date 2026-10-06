@@ -292,12 +292,16 @@ async function pickDirectoryFallbackAndProcess() {
   // Fallback using webkitdirectory input
   const input = $('#dirPickerFallback');
   return new Promise(res => {
-    input.onchange = async () => {
-      const files = [...input.files];
-      await processPickedFiles(files, /*rootName*/ null);
+    const handler = async () => {
+      try {
+        const files = [...input.files];
+        await processPickedFiles(files, /*rootName*/ null);
+      } catch (e) { console.error(e); }
       input.value = '';
+      input.removeEventListener('change', handler);
       res();
     };
+    input.addEventListener('change', handler);
     input.click();
   });
 }
@@ -310,13 +314,23 @@ async function pickDirectoryAndProcess() {
       const files = [];
       async function recurse(d, prefix = '') {
         for await (const [name, handle] of d.entries()) {
-          if (handle.kind === 'file') {
-            const f = await handle.getFile();
-            // emulate webkitRelativePath by prefixing folder name(s)
-            Object.defineProperty(f, 'webkitRelativePath', { value: prefix ? (prefix + '/' + name) : name, configurable: true });
-            files.push(f);
-          } else if (handle.kind === 'directory') {
-            await recurse(handle, prefix ? (prefix + '/' + name) : name);
+          try {
+            if (handle.kind === 'file') {
+              try {
+                const f = await handle.getFile();
+                // emulate webkitRelativePath by prefixing folder name(s)
+                Object.defineProperty(f, 'webkitRelativePath', { value: prefix ? (prefix + '/' + name) : name, configurable: true });
+                files.push(f);
+              } catch (fe) {
+                console.warn('file read failed', name, fe);
+                continue;
+              }
+            } else if (handle.kind === 'directory') {
+              await recurse(handle, prefix ? (prefix + '/' + name) : name);
+            }
+          } catch (entErr) {
+            console.warn('entry iteration failed', name, entErr);
+            continue;
           }
         }
       }
@@ -339,8 +353,8 @@ async function processPickedFiles(pickedFiles, rootName) {
   let candidate = rootName || '';
   if (!candidate) {
     // try to use parent folder from first file's webkitRelativePath
-    const p = files[0].webkitRelativePath || files[0].name;
-    const parts = (p.indexOf('/') >= 0) ? p.split('/') : [];
+    const p = pickedFiles[0].webkitRelativePath || pickedFiles[0].name;
+    const parts = (p && p.indexOf('/') >= 0) ? p.split('/') : [];
     if (parts.length > 1) candidate = parts[0];
   }
   // if still empty, attempt to use directory-like tokens from file name
