@@ -332,8 +332,8 @@ async function pickDirectoryAndProcess() {
   }
 }
 
-async function processPickedFiles(files, rootName) {
-  if (!files || files.length === 0) return;
+async function processPickedFiles(pickedFiles, rootName) {
+  if (!pickedFiles || pickedFiles.length === 0) return;
 
   // Determine a candidate name to parse meta from: prefer rootName, else try to infer from path
   let candidate = rootName || '';
@@ -344,7 +344,7 @@ async function processPickedFiles(files, rootName) {
     if (parts.length > 1) candidate = parts[0];
   }
   // if still empty, attempt to use directory-like tokens from file name
-  if (!candidate) candidate = files[0].name;
+  if (!candidate) candidate = pickedFiles[0].name;
 
   const meta = parseMetaFromName(candidate);
 
@@ -362,7 +362,7 @@ async function processPickedFiles(files, rootName) {
   // reset file boxes for form (do not upload yet) and fill with detected files
   const detected = { htt: [], fatura: [] };
 
-  for (const file of files) {
+  for (const file of pickedFiles) {
     const name = file.name || '';
     const lname = name.toLowerCase();
     if (lname.endsWith('.txt') && /\bnot\b/i.test(name)) {
@@ -477,9 +477,11 @@ $('#form').addEventListener('submit', async e => {
     };
 
     // Dosyaları yükle
+    const fileSets = (window.files || files);
     for (const key of ['htt', 'fatura']) {
       let urls = [];
-      for (const item of files[key]) {
+      const list = fileSets[key] || [];
+      for (const item of list) {
         if (item.url) urls.push(item.url);
         else if (item.blob) urls.push(await uploadFile(item.blob));
       }
@@ -489,6 +491,12 @@ $('#form').addEventListener('submit', async e => {
     await DB.save(rec);
     records = await DB.all();
     render();
+    // reset form state after successful save
+    editing = null;
+    files = { htt: [], fatura: [] };
+    window.files = { htt: [], fatura: [] };
+    syncFileBoxes();
+    $('#form').reset();
     $('#formDlg').close();
     toast('Kaydetme tamamlandı');
     setSaveStatus('Kaydetme tamamlandı', 'success');
