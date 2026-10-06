@@ -123,6 +123,7 @@
     const TABLE_NAME = 'Kullanıcılar';
 
     const SESSION_KEY = 'evrak-oturum';
+    const LOGIN_FLOW_KEY = 'evrak-login-flow';
     const HOURS = 12;
     const MAX_TRIES = 5, LOCK_SEC = 30;
 
@@ -130,15 +131,9 @@
     const form = $('#loginForm'), err = $('#err'), btn = $('#submit');
 
     (function () {
-      for (const st of [localStorage, sessionStorage]) {
-        try {
-          const s = JSON.parse(st.getItem(SESSION_KEY) || 'null');
-          if (s && Date.now() < s.exp) {
-            // Oturum varsa login ekranı gösterme; kullanıcının tekrar giriş yapması zorunlu olsun.
-            return;
-          }
-        } catch (e) { }
-      }
+      try {
+        sessionStorage.removeItem(LOGIN_FLOW_KEY);
+      } catch (e) { }
     })();
 
     $('#toggle').addEventListener('click', e => {
@@ -190,6 +185,7 @@
           localStorage.removeItem(SESSION_KEY);
           sessionStorage.removeItem(SESSION_KEY);
           localStorage.setItem(SESSION_KEY, session);
+          sessionStorage.setItem(LOGIN_FLOW_KEY, '1');
           location.replace('index.html');
         } else {
           $('#pass').value = '';
