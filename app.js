@@ -261,7 +261,7 @@ function openForm(rec = null) {
 function syncFileBoxes() {
   $$('.file').forEach(box => {
     const key = box.dataset.key;
-    const fs = files[key];
+    const fs = (window.files || files)[key];
     box.classList.toggle('has', fs.length > 0);
     const boxInner = $('.file-box', box);
     
