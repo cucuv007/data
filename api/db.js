@@ -2,7 +2,7 @@
 // Database proxy - secret key server'da sakla, client'tan erişilmesini engelle
 
 const ALLOWED_PREFIX = '/rest/v1/Tespit';
-const ALLOWED_METHODS = ['GET', 'POST', 'PATCH'];
+const ALLOWED_METHODS = ['GET', 'POST', 'PATCH', 'DELETE'];
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {

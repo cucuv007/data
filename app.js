@@ -29,7 +29,8 @@ const DB = {
       const txt = await res.text();
       throw new Error(txt || `Proxy request failed: ${res.status}`);
     }
-    return await res.json();
+    const txt = await res.text();
+    return txt ? JSON.parse(txt) : null;
   },
   async all() {
     const rows = await this.req(`/rest/v1/${TABLE_NAME}?select=*`);
@@ -61,6 +62,9 @@ const DB = {
     }
 
     return this.req(`/rest/v1/${TABLE_NAME}`, 'POST', payload);
+  },
+  async remove(id) {
+    return this.req(`/rest/v1/${TABLE_NAME}?id=eq.${encodeURIComponent(id)}`, 'DELETE');
   }
 };
 
@@ -862,7 +866,10 @@ $('#logoutBtn').addEventListener('click', () => {
 
 // Wait for config to load before fetching data
 configReady.then(() => {
-  DB.all().then(rows => { records = rows; render(); }).catch(e => toast('Veriler yüklenemedi.'));
+  DB.all().then(rows => { records = rows; render(); }).catch(e => {
+    console.error('Veri yüklenemedi:', e);
+    toast('Veriler yüklenemedi: ' + String(e.message || e).slice(0, 150));
+  });
 });
 
 /* ---------- Dışa Aktarma ---------- */
