@@ -248,7 +248,23 @@ const baseNoExt = n => (String(n || '').split(/[\\/]/).pop() || '').replace(/\.[
 const isNoteName = n => /not/i.test(baseNoExt(n)); // not, NOT, Not, notlar, not_1 ...
 
 async function readTextSmart(file) {
-  const buf = await file.arrayBuffer();
+  let buf;
+  try {
+    buf = await file.arrayBuffer();
+  } catch (e1) {
+    try {
+      buf = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => reject(r.error);
+        r.readAsArrayBuffer(file);
+      });
+    } catch (e2) {
+      const url = URL.createObjectURL(file);
+      try { buf = await (await fetch(url)).arrayBuffer(); }
+      finally { URL.revokeObjectURL(url); }
+    }
+  }
   let t = new TextDecoder('utf-8').decode(buf);
   if (t.includes('\uFFFD')) {
     try { t = new TextDecoder('windows-1254').decode(buf); } catch (e) {}
@@ -520,7 +536,9 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
   syncFileBoxes();
   toast(noteAssigned
     ? 'Klasörden meta ve not dolduruldu. HTT/Fatura dosyalarını manuel ekleyin.'
-    : 'Meta dolduruldu ancak not okunamadı (not .txt bulunamadı ya da tarayıcı dosyayı okuyamadı).');
+    : 'Meta dolduruldu ama not okunamadı. "Not dosyası seç" düğmesiyle NOT.txt dosyasını tek başına seçin.');
+  const nb = document.getElementById('noteBtn');
+  if (nb && !noteAssigned) nb.classList.add('primary');
 }
 
 function parseMetaFromName(name) {
@@ -813,6 +831,21 @@ $('#autoLoadBtn')?.addEventListener('click', async () => {
   // open form if not already
   if (!editing) openForm();
   await pickDirectoryAndProcess();
+});
+$('#noteBtn')?.addEventListener('click', () => $('#notePicker').click());
+$('#notePicker')?.addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const txt = await readTextSmart(file);
+    const ta = document.querySelector('#form textarea[name="not"]');
+    if (ta) { ta.value = txt; ta.dispatchEvent(new Event('input', { bubbles: true })); }
+    toast(txt ? 'Not eklendi.' : 'Dosya boş.');
+  } catch (err) {
+    console.error(err);
+    toast('Dosya okunamadı: ' + (err.message || err));
+  }
+  e.target.value = '';
 });
 $$('[data-close]').forEach(b => b.addEventListener('click', () => {
   const d = b.closest('dialog');
