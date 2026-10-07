@@ -238,7 +238,12 @@ function openForm(rec = null) {
   f.reset();
   $('#formTitle').textContent = rec ? 'Kaydı düzenle' : 'Yeni kayıt';
   setSaveStatus('', 'info');
-  ['kurul', 'plaka', 'tarih', 'driver', 'not'].forEach(k => f.elements[k].value = rec?.[k] ?? '');
+  // Populate form fields explicitly by name to avoid any collection-indexing issues
+  const fieldNames = ['kurul', 'plaka', 'tarih', 'driver', 'not'];
+  fieldNames.forEach(k => {
+    const el = $(`#form [name="${k}"]`);
+    if (el) el.value = rec?.[k] ?? '';
+  });
   if (!rec) f.elements.tarih.value = new Date().toISOString().slice(0, 10);
   if (f.elements.plaka) {
     f.elements.plaka.addEventListener('input', e => {
@@ -252,6 +257,9 @@ function openForm(rec = null) {
     try { files.htt = rec.htt ? JSON.parse(rec.htt).map(u => ({ url: u, name: u.split('/').pop() })) : []; } catch(e){}
     try { files.fatura = rec.fatura ? JSON.parse(rec.fatura).map(u => ({ url: u, name: u.split('/').pop() })) : []; } catch(e){}
   }
+  // Clear any leftover window.files from prior auto-loads so we don't accidentally
+  // override the files loaded from the record when saving.
+  try { delete window.files; } catch(e) { window.files = undefined; }
   syncFileBoxes();
   const formDlg = $('#formDlg');
   formDlg.setAttribute('open', 'open');
@@ -480,8 +488,14 @@ $('#form').addEventListener('submit', async e => {
     // Dosyaları yükle
     const fileSets = (window.files || files);
     for (const key of ['htt', 'fatura']) {
-      let urls = [];
       const list = fileSets[key] || [];
+      // If no files selected in the form for this key during edit, preserve existing value
+      if (list.length === 0 && editing && editing[key]) {
+        // keep existing JSON string from the original record
+        rec[key] = editing[key];
+        continue;
+      }
+      let urls = [];
       for (const item of list) {
         if (item.url) urls.push(item.url);
         else if (item.blob) urls.push(await uploadFile(item.blob));
