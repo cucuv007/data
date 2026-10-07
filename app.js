@@ -241,6 +241,30 @@ function syncFileBoxes() {
 }
 
 /* ---------- Otomatik Yükleme (Klasörden) ---------- */
+const baseNoExt = n => (String(n || '').split(/[\\/]/).pop() || '').replace(/\.[^.]+$/, '');
+const isNoteName = n => /not/i.test(baseNoExt(n)); // not, NOT, Not, notlar, not_1 ...
+
+async function readTextSmart(file) {
+  const buf = await file.arrayBuffer();
+  let t = new TextDecoder('utf-8').decode(buf);
+  if (t.includes('\uFFFD')) {
+    try { t = new TextDecoder('windows-1254').decode(buf); } catch (e) {}
+  }
+  return t.replace(/\uFEFF/g, '').trim();
+}
+
+async function readBestNote(list) {
+  const cands = (list || []).filter(f => /\.txt$/i.test(f.name || '') || (!/\./.test(f.name || '') && isNoteName(f.name)));
+  cands.sort((a, b) => (isNoteName(b.name) - isNoteName(a.name)) || ((b.size || 0) - (a.size || 0)));
+  for (const f of cands) {
+    try {
+      const t = await readTextSmart(f);
+      if (t) return t;
+    } catch (e) { console.warn('Not okunamadı:', f.name, e); }
+  }
+  return '';
+}
+
 async function pickDirectoryFallbackAndProcess() {
   // Fallback using webkitdirectory input
   const input = $('#dirPickerFallback');
@@ -300,6 +324,7 @@ async function pickDirectoryFallbackAndProcess() {
         }
         
         // Pass files and pre-read note content
+        preReadNoteContent = (await readBestNote(files)) || preReadNoteContent;
         await processPickedFiles(files, /*rootName*/ null, preReadNoteContent);
       } catch (e) { console.error(e); }
       input.value = '';
@@ -355,7 +380,7 @@ async function pickDirectoryAndProcess() {
         await pickDirectoryFallbackAndProcess();
         return;
       }
-      await processPickedFiles(files, dir.name);
+      await processPickedFiles(files, dir.name, await readBestNote(files));
     } catch (e) {
       console.error(e);
       // fallback
@@ -458,10 +483,10 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
     }
   }
 
-  if (chosen) {
-    let txt = preReadNoteContent || '';
+  {
+    let txt = preReadNoteContent || await readBestNote(pickedFiles) || '';
     
-    if (!txt) {
+    if (!txt && chosen) {
       // If pre-read didn't work, try FileReader (for showDirectoryPicker path)
       try {
         console.log('Reading chosen note file:', chosen.name);
