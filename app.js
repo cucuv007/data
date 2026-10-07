@@ -23,14 +23,11 @@ let configReady = new Promise((resolve) => {
       } else {
         // Local development - use .env.local
         console.log('Local development mode - using .env.local');
-        SUPABASE_KEY = 'sb_secret_I2VdmU8XGfp_wgApFM1szA_KMkqVjmK'; // Fallback for local dev only
+        // TODO: Load from .env.local file or use placeholder
       }
     } catch (e) {
       console.warn('Error loading configuration:', e);
-      // Fallback for local dev
-      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-        SUPABASE_KEY = 'sb_secret_I2VdmU8XGfp_wgApFM1szA_KMkqVjmK';
-      }
+      // Local dev fallback - load from .env.local or user will need to provide
     }
     resolve();
   })();
