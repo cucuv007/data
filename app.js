@@ -251,7 +251,8 @@ async function pickDirectoryFallbackAndProcess() {
         const files = [...input.files];
         console.log('Fallback picker selected files:', files.map(f=>f.name));
         toast(`${files.length} dosya seçildi (klasör fallback).`);
-        await processPickedFiles(files, /*rootName*/ null);
+        // Pass input reference so processPickedFiles can re-access it if needed
+        await processPickedFiles(files, /*rootName*/ null, input);
       } catch (e) { console.error(e); }
       input.value = '';
       input.removeEventListener('change', handler);
@@ -317,7 +318,7 @@ async function pickDirectoryAndProcess() {
   }
 }
 
-async function processPickedFiles(pickedFiles, rootName) {
+async function processPickedFiles(pickedFiles, rootName, fallbackInput) {
   if (!pickedFiles || pickedFiles.length === 0) return;
   console.log('processPickedFiles called, rootName=', rootName, 'files=', pickedFiles.map(f=>f.name));
 
@@ -442,16 +443,36 @@ async function processPickedFiles(pickedFiles, rootName) {
   if (chosen) {
     try {
       console.log('Reading chosen note file:', chosen.name);
-      // Use FileReader for webkitdirectory compatibility (fallback input)
-      let txt = await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => {
-          console.warn('FileReader error:', reader.error);
-          reject(reader.error);
-        };
-        reader.readAsText(chosen);
-      });
+      let txt = '';
+      try {
+        // Try FileReader first
+        txt = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(String(reader.result || ''));
+          reader.onerror = () => reject(reader.error);
+          reader.readAsText(chosen);
+        });
+      } catch (readerErr) {
+        // FileReader failed (webkitdirectory perms issue). Try fallback via input.files re-access
+        console.warn('FileReader failed, trying fallback input.files access:', readerErr);
+        if (fallbackInput && fallbackInput.files) {
+          // Find the txt file in input.files by name
+          const notFile = [...fallbackInput.files].find(f => f.name === chosen.name);
+          if (notFile) {
+            txt = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result || ''));
+              reader.onerror = () => reject(reader.error);
+              reader.readAsText(notFile);
+            });
+            console.log('Successfully read via fallback input.files');
+          } else {
+            throw new Error('Note file not found in fallback input.files');
+          }
+        } else {
+          throw readerErr;
+        }
+      }
       txt = txt.replace(/\uFEFF/g, '').trim();
       // assign in microtask and dispatch input
       Promise.resolve().then(() => {
