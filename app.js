@@ -5,7 +5,7 @@ const STORAGE_BUCKET = 'evrak_files';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* ---------- Veri katmanı (Supabase) ---------- */
 const recKey = rec => [rec?.kurul ?? '', rec?.tarih ?? '', rec?.plaka ?? ''].join('::');
@@ -66,62 +66,8 @@ const DB = {
     }
 
     return this.req(`/rest/v1/${TABLE_NAME}`, 'POST', payload);
-  },
-  async remove(id) {
-    if (isSyntheticId(id)) {
-      const [kurul, tarih, plaka] = String(id).split('::');
-      return this.req(`/rest/v1/${TABLE_NAME}?kurul=eq.${encodeURIComponent(kurul)}&tarih=eq.${encodeURIComponent(tarih)}&plaka=eq.${encodeURIComponent(plaka)}`, 'DELETE');
-    }
-    return this.req(`/rest/v1/${TABLE_NAME}?id=eq.${id}`, 'DELETE');
   }
 };
-
-/* ---------- Dosya Sıkıştırma ve Yükleme ---------- */
-async function compressImage(file, maxDim = 1200) {
-  if (file.type === 'application/pdf') return file; // PDF'ler sıkıştırılmaz
-  return new Promise(res => {
-    const reader = new FileReader();
-    reader.onload = e => {
-      const img = new Image();
-      img.onload = () => {
-        let { width, height } = img;
-        if (width > maxDim || height > maxDim) {
-          const ratio = Math.min(maxDim / width, maxDim / height);
-          width = Math.round(width * ratio);
-          height = Math.round(height * ratio);
-        }
-        const canvas = document.createElement('canvas');
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, width, height);
-        canvas.toBlob(blob => res(new File([blob], file.name, { type: 'image/jpeg' })), 'image/jpeg', 0.8);
-      };
-      img.src = e.target.result;
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
-async function uploadFile(file) {
-  const comp = await compressImage(file);
-  const ext = (comp.name.split('.').pop() || 'jpg').toLowerCase();
-  const fileName = Date.now() + '_' + Math.random().toString(36).substr(2, 5) + '.' + ext;
-  
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${fileName}`, {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': comp.type || 'application/octet-stream'
-    },
-    body: comp
-  });
-  if (!res.ok) {
-    throw new Error(`Dosya yüklenemedi. Supabase Storage bucket "${STORAGE_BUCKET}" mevcut değil veya erişim kapalı. Önce Supabase > Storage > New bucket ile "${STORAGE_BUCKET}" adında public bucket oluşturup tekrar deneyin.`);
-  }
-  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${fileName}`;
-}
 
 /* ---------- Durum ---------- */
 let records = [];
