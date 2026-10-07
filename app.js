@@ -1,11 +1,25 @@
-const SUPABASE_URL = typeof process !== 'undefined' && process.env.SUPABASE_URL
-  ? process.env.SUPABASE_URL
-  : 'https://rcvyytkxcgmydkcicxdz.supabase.co';
-const SUPABASE_KEY = typeof process !== 'undefined' && process.env.SUPABASE_SECRET_KEY
-  ? process.env.SUPABASE_SECRET_KEY
-  : 'YOUR_VERCEL_SECRET_KEY_HERE';
+let SUPABASE_URL = 'https://rcvyytkxcgmydkcicxdz.supabase.co';
+let SUPABASE_KEY = 'sb_secret_a-f0SudXtfIqY2CNXEbH5Q_wNpHnTRY'; // Local development
 const TABLE_NAME = 'Tespit';
 const STORAGE_BUCKET = 'evrak_files';
+
+// Vercel'de deploy edilirse, /api/config'den değerleri al
+(async () => {
+  try {
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      // Production - config endpoint'ten al
+      const res = await fetch('/api/config');
+      if (res.ok) {
+        const config = await res.json();
+        SUPABASE_URL = config.supabaseUrl || SUPABASE_URL;
+        // Secret key browser'dan erişilmemeli, server-side proxy kullan
+        console.log('Config loaded from Vercel');
+      }
+    }
+  } catch (e) {
+    console.warn('Could not load config from /api/config:', e);
+  }
+})();
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
