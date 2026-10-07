@@ -1,9 +1,4 @@
 {
   "buildCommand": "echo 'Static site, no build needed'",
-  "outputDirectory": ".",
-  "env": [
-    "SUPABASE_URL",
-    "SUPABASE_SECRET_KEY",
-    "SUPABASE_PUBLISHABLE_KEY"
-  ]
+  "outputDirectory": "."
 }

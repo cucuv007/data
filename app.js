@@ -1,37 +1,7 @@
-let SUPABASE_URL = 'https://rcvyytkxcgmydkcicxdz.supabase.co';
-let SUPABASE_KEY = ''; // Will be loaded from Vercel env via /api/db
 const TABLE_NAME = 'Tespit';
-const STORAGE_BUCKET = 'evrak_files';
 
-// Load configuration on startup
-let configReady = new Promise((resolve) => {
-  (async () => {
-    try {
-      const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-      
-      if (isProduction) {
-        // Production (Vercel) - Fetch config from backend API that has access to env variables
-        const res = await fetch('/api/config');
-        if (res.ok) {
-          const config = await res.json();
-          SUPABASE_URL = config.supabaseUrl || SUPABASE_URL;
-          SUPABASE_KEY = config.supabaseSecretKey || SUPABASE_KEY;
-          console.log('Config loaded from Vercel API');
-        } else {
-          console.warn('Failed to load config from /api/config:', res.status);
-        }
-      } else {
-        // Local development - use .env.local
-        console.log('Local development mode - using .env.local');
-        // TODO: Load from .env.local file or use placeholder
-      }
-    } catch (e) {
-      console.warn('Error loading configuration:', e);
-      // Local dev fallback - load from .env.local or user will need to provide
-    }
-    resolve();
-  })();
-});
+// Secret key istemcide yok; işlemler /api/db ve /api/upload üzerinden yapılır.
+const configReady = Promise.resolve();
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -998,22 +968,15 @@ async function uploadFile(file) {
   const ext = (comp.name.split('.').pop() || 'jpg').toLowerCase();
   const fileName = Date.now() + '_' + Math.random().toString(36).substr(2, 5) + '.' + ext;
   
-  const formData = new FormData();
-  formData.append('file', comp);
-  
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${fileName}`, {
+  const res = await fetch(`/api/upload?name=${encodeURIComponent(fileName)}`, {
     method: 'POST',
-    headers: {
-      'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`
-    },
-    body: formData
+    headers: { 'Content-Type': comp.type || 'application/octet-stream' },
+    body: comp
   });
   if (!res.ok) {
-    const errData = await res.json();
-    throw new Error(`Upload error: ${res.status} ${JSON.stringify(errData)}`);
+    throw new Error(`Upload error: ${res.status} ${await res.text()}`);
   }
-  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${fileName}`;
+  return (await res.json()).url;
 }
 
 async function compressImage(file, maxDim = 1200) {

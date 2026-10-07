@@ -1,50 +1,47 @@
 // /api/db.js
 // Database proxy - secret key server'da sakla, client'tan erişilmesini engelle
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://rcvyytkxcgmydkcicxdz.supabase.co';
-const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
+const ALLOWED_PREFIX = '/rest/v1/Tespit';
+const ALLOWED_METHODS = ['GET', 'POST', 'PATCH'];
 
-if (!SUPABASE_SECRET_KEY) {
-  console.error('SUPABASE_SECRET_KEY is not set in Vercel environment variables');
-}
-
-async function supabaseReq(path, method = 'GET', body = null) {
-  const opts = {
-    method,
-    headers: {
-      'apikey': SUPABASE_SECRET_KEY,
-      'Authorization': `Bearer ${SUPABASE_SECRET_KEY}`,
-      'Prefer': 'return=representation'
-    }
-  };
-  if (body) {
-    opts.headers['Content-Type'] = 'application/json';
-    opts.body = JSON.stringify(body);
-  }
-  const res = await fetch(`${SUPABASE_URL}${path}`, opts);
-  if (!res.ok) throw new Error(await res.text());
-  if (method === 'DELETE' || res.status === 204) return null;
-  return await res.json();
-}
-
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
+module.exports = async function handler(req, res) {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
     return;
   }
-
-  try {
-    const { path, method = 'GET', body } = req.body || {};
-
-    const targetPath = path || `/rest/v1/Tespit`;
-    const result = await supabaseReq(targetPath, method, body);
-    res.status(200).json(result);
-  } catch (error) {
-    console.error('Database proxy error:', error);
-    res.status(500).json({ error: error.message });
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const KEY = process.env.SUPABASE_SECRET_KEY;
+  if (!SUPABASE_URL || !KEY) {
+    res.status(500).json({ error: 'SUPABASE_URL / SUPABASE_SECRET_KEY eksik' });
+    return;
   }
-}
+  try {
+    let payload = req.body;
+    if (typeof payload === 'string') payload = JSON.parse(payload || '{}');
+    const { path, method = 'GET', body = null } = payload || {};
+    if (typeof path !== 'string' || !(path === ALLOWED_PREFIX || path.startsWith(ALLOWED_PREFIX + '?'))) {
+      res.status(403).json({ error: 'Path izinli değil' });
+      return;
+    }
+    if (!ALLOWED_METHODS.includes(method)) {
+      res.status(403).json({ error: 'Method izinli değil' });
+      return;
+    }
+    const headers = { apikey: KEY, Authorization: `Bearer ${KEY}`, Prefer: 'return=representation' };
+    const opts = { method, headers };
+    if (body) {
+      headers['Content-Type'] = 'application/json';
+      opts.body = JSON.stringify(body);
+    }
+    const r = await fetch(`${SUPABASE_URL}${path}`, opts);
+    const text = await r.text();
+    if (!r.ok) {
+      res.status(r.status).json({ error: text });
+      return;
+    }
+    res.status(200).json(text ? JSON.parse(text) : null);
+  } catch (e) {
+    console.error('db proxy error:', e);
+    res.status(500).json({ error: String(e.message || e) });
+  }
+};
