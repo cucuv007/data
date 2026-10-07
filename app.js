@@ -977,3 +977,51 @@ function exportRowsToPdf() {
 
 $('#exportExcelBtn').addEventListener('click', exportRowsToExcel);
 $('#exportPdfBtn').addEventListener('click', exportRowsToPdf);
+
+/* ---------- Dosya Yükleme ---------- */
+async function uploadFile(blob) {
+  // Compress if image, otherwise upload as-is
+  if (blob.type.startsWith('image/')) {
+    blob = await compressImage(blob);
+  }
+  
+  // Generate unique filename
+  const ext = blob.type.includes('pdf') ? '.pdf' : blob.type.includes('jpeg') || blob.type.includes('jpg') ? '.jpg' : blob.type.includes('png') ? '.png' : '';
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`;
+  
+  // Upload to Supabase Storage
+  const formData = new FormData();
+  formData.append('file', blob, filename);
+  
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${filename}`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${SUPABASE_KEY}` },
+    body: formData
+  });
+  
+  if (!res.ok) throw new Error('Dosya yükleme başarısız');
+  
+  // Return public URL
+  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${filename}`;
+}
+
+async function compressImage(blob) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+        canvas.toBlob(compressed => {
+          resolve(compressed || blob);
+        }, 'image/jpeg', 0.8);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(blob);
+  });
+}
