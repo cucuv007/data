@@ -303,6 +303,8 @@ async function pickDirectoryFallbackAndProcess() {
     const handler = async () => {
       try {
         const files = [...input.files];
+        console.log('Fallback picker selected files:', files.map(f=>f.name));
+        toast(`${files.length} dosya seçildi (klasör fallback).`);
         await processPickedFiles(files, /*rootName*/ null);
       } catch (e) { console.error(e); }
       input.value = '';
@@ -319,6 +321,7 @@ async function pickDirectoryAndProcess() {
   if (window.showDirectoryPicker) {
     try {
       const dir = await window.showDirectoryPicker();
+      toast(`Klasör seçildi: ${dir.name}`);
       const files = [];
       async function recurse(d, prefix = '') {
         for await (const [name, handle] of d.entries()) {
@@ -343,6 +346,8 @@ async function pickDirectoryAndProcess() {
         }
       }
       await recurse(dir);
+      console.log('Picked files from showDirectoryPicker:', files.map(f=>f.name));
+      toast(`${files.length} dosya bulundu.`);
       await processPickedFiles(files, dir.name);
     } catch (e) {
       console.error(e);
@@ -356,6 +361,12 @@ async function pickDirectoryAndProcess() {
 
 async function processPickedFiles(pickedFiles, rootName) {
   if (!pickedFiles || pickedFiles.length === 0) return;
+  console.log('processPickedFiles called, rootName=', rootName, 'files=', pickedFiles.map(f=>f.name));
+
+  // Ensure the form is open
+  if (!editing) {
+    try { openForm(); } catch(e) { console.warn('Could not open form before processing files', e); }
+  }
 
   // Determine a candidate name to parse meta from: prefer rootName, else try to infer from path
   let candidate = rootName || '';
@@ -369,6 +380,7 @@ async function processPickedFiles(pickedFiles, rootName) {
   if (!candidate) candidate = pickedFiles[0].name;
 
   const meta = parseMetaFromName(candidate);
+  console.log('Parsed meta from candidate:', candidate, meta);
 
   // prepare to fill form fields
   const f = $('#form');
@@ -380,6 +392,14 @@ async function processPickedFiles(pickedFiles, rootName) {
     if (d) f.elements.tarih.value = d.toISOString().slice(0,10);
   }
   if (meta.driver) f.elements.driver.value = meta.driver;
+
+  // If nothing was parsed, try to infer a plate from filenames as fallback
+  if (!meta.plaka) {
+    for (const file of pickedFiles) {
+      const m = (file.name || '').match(/([A-ZÇŞĞÜİÖ]{1,3}\s*\d{2,4})/i);
+      if (m) { f.elements.plaka.value = normalizePlateValue(m[1]); break; }
+    }
+  }
 
   // Only read .txt notes and metadata; DO NOT auto-attach PDFs (HTT/Fatura)
   for (const file of pickedFiles) {
@@ -397,7 +417,6 @@ async function processPickedFiles(pickedFiles, rootName) {
   files = { htt: [], fatura: [] };
   window.files = files;
   syncFileBoxes();
-
   toast('Klasörden meta ve notlar dolduruldu. HTT/Fatura dosyalarını manuel ekleyin.');
 }
 
