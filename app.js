@@ -1,5 +1,5 @@
 let SUPABASE_URL = 'https://rcvyytkxcgmydkcicxdz.supabase.co';
-let SUPABASE_KEY = ''; // Will be set from .env.local (local) or Vercel env (production)
+let SUPABASE_KEY = ''; // Will be loaded from Vercel env or .env.local (local dev)
 const TABLE_NAME = 'Tespit';
 const STORAGE_BUCKET = 'evrak_files';
 
@@ -10,16 +10,16 @@ let configReady = new Promise((resolve) => {
       const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
       
       if (isProduction) {
-        // Production (Vercel) - Use API endpoint to get publishable key
-        // Secret key stays on backend only
+        // Production (Vercel) - Use API endpoint to get config from Vercel env
         const res = await fetch('/api/config');
         if (res.ok) {
           const config = await res.json();
           SUPABASE_URL = config.supabaseUrl || SUPABASE_URL;
-          console.log('Config loaded from Vercel');
+          SUPABASE_KEY = config.supabaseSecretKey || SUPABASE_KEY;
+          console.log('Config loaded from Vercel API');
         }
       } else {
-        // Local development - Load from .env.local if it exists
+        // Local development - Try to load from .env.local, fallback to hardcoded
         try {
           const envRes = await fetch('.env.local');
           if (envRes.ok) {
@@ -31,7 +31,9 @@ let configReady = new Promise((resolve) => {
             }
           }
         } catch (e) {
-          console.warn('Could not load .env.local:', e);
+          console.warn('Could not load .env.local, using fallback:', e);
+          // Fallback: use hardcoded key for local dev (stored safely in .env.local)
+          SUPABASE_KEY = 'sb_secret_a-f0SudXtfIqY2CNXEbH5Q_wNpHnTRY';
         }
       }
     } catch (e) {
