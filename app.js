@@ -1,5 +1,5 @@
 const SUPABASE_URL = 'https://rcvyytkxcgmydkcicxdz.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_GpnawTaymipKiC-n4HEUcw_D5_eyEgT';
+const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY || 'YOUR_SECRET_KEY_HERE';
 const TABLE_NAME = 'Tespit';
 const STORAGE_BUCKET = 'evrak_files';
 
@@ -652,17 +652,9 @@ $('#form').addEventListener('submit', async e => {
     };
 
     // Dosyaları yükle
-    const fileSets = (window.files || files);
     for (const key of ['htt', 'fatura']) {
-      const list = fileSets[key] || [];
-      // If no files selected in the form for this key during edit, preserve existing value
-      if (list.length === 0 && editing && editing[key]) {
-        // keep existing JSON string from the original record
-        rec[key] = editing[key];
-        continue;
-      }
       let urls = [];
-      for (const item of list) {
+      for (const item of files[key]) {
         if (item.url) urls.push(item.url);
         else if (item.blob) urls.push(await uploadFile(item.blob));
       }
@@ -672,12 +664,6 @@ $('#form').addEventListener('submit', async e => {
     await DB.save(rec);
     records = await DB.all();
     render();
-    // reset form state after successful save
-    editing = null;
-    files = { htt: [], fatura: [] };
-    window.files = { htt: [], fatura: [] };
-    syncFileBoxes();
-    $('#form').reset();
     $('#formDlg').close();
     toast('Kaydetme tamamlandı');
     setSaveStatus('Kaydetme tamamlandı', 'success');
@@ -979,56 +965,51 @@ $('#exportExcelBtn').addEventListener('click', exportRowsToExcel);
 $('#exportPdfBtn').addEventListener('click', exportRowsToPdf);
 
 /* ---------- Dosya Yükleme ---------- */
-async function uploadFile(blob) {
-  // Compress if image, otherwise upload as-is
-  if (blob.type.startsWith('image/')) {
-    blob = await compressImage(blob);
-  }
+async function uploadFile(file) {
+  const comp = await compressImage(file);
+  const ext = (comp.name.split('.').pop() || 'jpg').toLowerCase();
+  const fileName = Date.now() + '_' + Math.random().toString(36).substr(2, 5) + '.' + ext;
   
-  // Generate unique filename
-  const ext = blob.type.includes('pdf') ? '.pdf' : blob.type.includes('jpeg') || blob.type.includes('jpg') ? '.jpg' : blob.type.includes('png') ? '.png' : '';
-  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`;
+  const formData = new FormData();
+  formData.append('file', comp);
   
-  // Upload to Supabase Storage using REST API
-  // POST /storage/v1/object/{bucketName}/{fileName}
-  const url = `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${filename}`;
-  
-  const res = await fetch(url, {
+  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${fileName}`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
-      'Content-Type': blob.type || 'application/octet-stream'
+      'apikey': SUPABASE_KEY,
+      'Authorization': `Bearer ${SUPABASE_KEY}`
     },
-    body: blob
+    body: formData
   });
-  
   if (!res.ok) {
-    const errText = await res.text();
-    console.error('Upload error:', res.status, errText);
-    throw new Error(`Dosya yükleme başarısız (${res.status}): ${errText}`);
+    const errData = await res.json();
+    throw new Error(`Upload error: ${res.status} ${JSON.stringify(errData)}`);
   }
-  
-  // Return public URL
-  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${filename}`;
+  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${fileName}`;
 }
 
-async function compressImage(blob) {
-  return new Promise(resolve => {
+async function compressImage(file, maxDim = 1200) {
+  if (file.type === 'application/pdf') return file; // PDF'ler sıkıştırılmaz
+  return new Promise(res => {
     const reader = new FileReader();
     reader.onload = e => {
       const img = new Image();
       img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const ratio = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
         const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext('2d');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        ctx.drawImage(img, 0, 0);
-        canvas.toBlob(compressed => {
-          resolve(compressed || blob);
-        }, 'image/jpeg', 0.8);
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => res(new File([blob], file.name, { type: 'image/jpeg' })), 'image/jpeg', 0.8);
       };
       img.src = e.target.result;
     };
-    reader.readAsDataURL(blob);
+    reader.readAsDataURL(file);
   });
 }
