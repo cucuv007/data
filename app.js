@@ -384,14 +384,24 @@ async function processPickedFiles(pickedFiles, rootName) {
 
   // prepare to fill form fields
   const f = $('#form');
-  if (meta.kurul) f.elements.kurul.value = meta.kurul;
-  if (meta.plaka) f.elements.plaka.value = normalizePlateValue(meta.plaka);
+  // Use explicit selectors to set fields to avoid collection/index issues
+  const setField = (name, value) => {
+    const el = $(`#form [name="${name}"]`);
+    if (!el) return false;
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT') {
+      el.value = value || '';
+      return true;
+    }
+    return false;
+  };
+
+  if (meta.kurul) setField('kurul', meta.kurul);
+  if (meta.plaka) setField('plaka', normalizePlateValue(meta.plaka));
   if (meta.tarih) {
-    // convert to yyyy-mm-dd if possible
     const d = parseDateString(meta.tarih);
-    if (d) f.elements.tarih.value = d.toISOString().slice(0,10);
+    if (d) setField('tarih', d.toISOString().slice(0,10));
   }
-  if (meta.driver) f.elements.driver.value = meta.driver;
+  if (meta.driver) setField('driver', meta.driver);
 
   // If nothing was parsed, try to infer a plate from filenames as fallback
   if (!meta.plaka) {
@@ -400,6 +410,35 @@ async function processPickedFiles(pickedFiles, rootName) {
       if (m) { f.elements.plaka.value = normalizePlateValue(m[1]); break; }
     }
   }
+
+  // --- Debug panel (visible on page) ---
+  try {
+    let dbg = document.getElementById('autoDebug');
+    if (!dbg) {
+      dbg = document.createElement('div');
+      dbg.id = 'autoDebug';
+      dbg.style.position = 'fixed';
+      dbg.style.right = '12px';
+      dbg.style.bottom = '12px';
+      dbg.style.background = 'rgba(0,0,0,0.7)';
+      dbg.style.color = '#fff';
+      dbg.style.padding = '10px';
+      dbg.style.fontSize = '12px';
+      dbg.style.zIndex = 9999;
+      dbg.style.maxWidth = '360px';
+      dbg.style.maxHeight = '50vh';
+      dbg.style.overflow = 'auto';
+      dbg.style.borderRadius = '6px';
+      document.body.appendChild(dbg);
+    }
+    dbg.innerHTML = `
+      <strong>Auto-load debug</strong><br>
+      <em>candidate:</em> ${esc(candidate)}<br>
+      <em>parsed:</em> ${esc(JSON.stringify(meta))}<br>
+      <em>files:</em> ${esc(pickedFiles.map(f=>f.name).join(', '))}<br>
+      <em>form kuruldu:</em> ${editing ? 'editing' : 'new'}
+    `;
+  } catch (e) { console.warn('debug panel update failed', e); }
 
   // Only read .txt notes and metadata; DO NOT auto-attach PDFs (HTT/Fatura)
   for (const file of pickedFiles) {
