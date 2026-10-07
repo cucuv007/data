@@ -38,14 +38,10 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { action, path, method = 'GET', body } = req.body || {};
+    const { path, method = 'GET', body } = req.body || {};
 
-    if (!action) {
-      res.status(400).json({ error: 'Missing action' });
-      return;
-    }
-
-    const result = await supabaseReq(path || `/rest/v1/Tespit`, method, body);
+    const targetPath = path || `/rest/v1/Tespit`;
+    const result = await supabaseReq(targetPath, method, body);
     res.status(200).json(result);
   } catch (error) {
     console.error('Database proxy error:', error);

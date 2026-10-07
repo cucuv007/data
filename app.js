@@ -49,21 +49,16 @@ const stripSyntheticId = data => {
 
 const DB = {
   async req(path, method = 'GET', body = null) {
-    const opts = {
-      method,
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-        'Prefer': 'return=representation'
-      }
-    };
-    if (body) {
-      opts.headers['Content-Type'] = 'application/json';
-      opts.body = JSON.stringify(body);
+    // Use server-side proxy to avoid exposing the Supabase secret key in the client
+    const res = await fetch('/api/db', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path, method, body })
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(txt || `Proxy request failed: ${res.status}`);
     }
-    const res = await fetch(`${SUPABASE_URL}${path}`, opts);
-    if (!res.ok) throw new Error(await res.text());
-    if (method === 'DELETE' || res.status === 204) return null;
     return await res.json();
   },
   async all() {
