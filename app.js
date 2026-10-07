@@ -1,5 +1,5 @@
 let SUPABASE_URL = 'https://rcvyytkxcgmydkcicxdz.supabase.co';
-let SUPABASE_KEY = ''; // Will be loaded from Vercel env or .env.local (local dev)
+let SUPABASE_KEY = 'sb_secret_a-f0SudXtfIqY2CNXEbH5Q_wNpHnTRY'; // Fallback for local dev (remove before production)
 const TABLE_NAME = 'Tespit';
 const STORAGE_BUCKET = 'evrak_files';
 
