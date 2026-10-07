@@ -254,25 +254,50 @@ async function pickDirectoryFallbackAndProcess() {
         
         // Pre-read note content while input.files is still accessible
         let preReadNoteContent = null;
-        const notTxtFile = files.find(f => {
+        
+        // Collect all .txt files, prioritize ones with 'not' in name
+        const txtFiles = files.filter(f => {
           const lname = (f.name || '').toLowerCase();
-          const baseName = (f.name.split(/[\\/]/).pop() || '').toLowerCase();
-          const baseNoExt = baseName.replace(/\.[^.]+$/, '');
-          return lname.endsWith('.txt') && (baseNoExt === 'not' || /\bnot\b/i.test(baseNoExt));
+          return lname.endsWith('.txt');
         });
         
-        if (notTxtFile) {
+        // Sort: first those with 'not' in base name, then by size (largest first)
+        txtFiles.sort((a, b) => {
+          const aHasNot = /\bnot\b/i.test((a.name.split(/[\\/]/).pop() || '').replace(/\.[^.]+$/, ''));
+          const bHasNot = /\bnot\b/i.test((b.name.split(/[\\/]/).pop() || '').replace(/\.[^.]+$/, ''));
+          if (aHasNot && !bHasNot) return -1;
+          if (!aHasNot && bHasNot) return 1;
+          return (b.size || 0) - (a.size || 0);
+        });
+        
+        // Try to read each .txt file until one succeeds
+        for (const txtFile of txtFiles) {
           try {
+            console.log('Attempting to read txt file:', txtFile.name);
             preReadNoteContent = await new Promise((resolve, reject) => {
               const reader = new FileReader();
-              reader.onload = () => resolve(String(reader.result || ''));
-              reader.onerror = () => reject(reader.error);
-              reader.readAsText(notTxtFile);
+              reader.onload = () => {
+                const content = String(reader.result || '');
+                console.log('Successfully read', txtFile.name, '(len):', content.length);
+                resolve(content);
+              };
+              reader.onerror = () => {
+                console.warn('FileReader error for', txtFile.name, ':', reader.error);
+                reject(reader.error);
+              };
+              reader.readAsText(txtFile);
             });
-            console.log('Pre-read note content in handler (len):', preReadNoteContent.length);
+            break; // Success, stop trying
           } catch (e) {
-            console.warn('Failed to pre-read note in handler:', e);
+            console.warn('Failed to read', txtFile.name, ':', e);
+            continue; // Try next file
           }
+        }
+        
+        if (preReadNoteContent) {
+          console.log('Pre-read note content successful (len):', preReadNoteContent.length);
+        } else {
+          console.warn('No txt files could be read from fallback input');
         }
         
         // Pass files and pre-read note content
