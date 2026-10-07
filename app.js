@@ -473,39 +473,57 @@ async function processPickedFiles(pickedFiles, rootName) {
 function parseMetaFromName(name) {
   const out = {};
   if (!name) return out;
-  const s = name.replace(/[_\[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
+  // Normalize spacing and keep original for later capitalization
+  let s = name.replace(/[_\[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
+  const S = s; // original cleaned
 
-  // Kurul: look for 'KURUL' followed by number
-  let m = s.match(/(KURUL)\s*[:\-]?\s*(\d+)/i);
-  if (m) out.kurul = (m[1] + ' ' + m[2]).toUpperCase();
-  else {
-    m = s.match(/(KURUL\s*\d+)/i);
-    if (m) out.kurul = m[1].toUpperCase();
-  }
-
-  // Tarih: dd.mm.yyyy or dd-mm-yyyy
-  m = s.match(/(\d{1,2}[\.\-\/]\d{1,2}[\.\-\/]\d{2,4})/);
-  if (m) out.tarih = m[1];
-
-  // Plaka: letters then digits pattern (1-3 letters + space? + 2-4 digits)
-  m = s.match(/([A-ZÇŞĞÜİÖ]{1,3}\s*\d{2,4})/i);
-  if (m) out.plaka = m[1].toUpperCase();
-
-  // Driver: attempt: sequence of words (at least 2) between plaka and tarih, or capitalized words
-  if (out.plaka && out.tarih) {
-    const idx1 = s.toUpperCase().indexOf(out.plaka.toUpperCase());
-    const idx2 = s.indexOf(out.tarih);
-    if (idx1 >= 0 && idx2 > idx1) {
-      const mid = s.substring(idx1 + out.plaka.length, idx2).replace(/[-_\(\)\[\]]/g, ' ').trim();
-      const words = mid.split(/\s+/).filter(Boolean);
-      if (words.length >= 2) out.driver = words.map(w => capitalizeWord(w)).join(' ');
+  // 1) Extract KURUL token and remove it from the working string
+  let m = s.match(/\b(KURUL)\s*[:\-]?\s*(\d+)\b/i);
+  if (m) {
+    out.kurul = (m[1] + ' ' + m[2]).toUpperCase();
+    s = s.replace(m[0], ' ');
+  } else {
+    m = s.match(/\b(KURUL\s*\d+)\b/i);
+    if (m) {
+      out.kurul = m[1].toUpperCase();
+      s = s.replace(m[0], ' ');
     }
   }
-  // fallback: find sequences of 2-3 capitalized words
+
+  // 2) Extract date (dd.mm.yyyy etc.) and remove it
+  m = s.match(/(\d{1,2}[\.\-\/]\d{1,2}[\.\-\/]\d{2,4})/);
+  if (m) {
+    out.tarih = m[1];
+    s = s.replace(m[0], ' ');
+  }
+
+  // 3) Extract plate: look for 1-3 letters and 2-4 digits (ensure we don't match leftover 'KURUL')
+  m = s.match(/\b([A-ZÇŞĞÜİÖ]{1,3})\s*(\d{2,4})\b/i);
+  if (m) {
+    out.plaka = (m[1] + ' ' + m[2]).toUpperCase();
+    s = s.replace(m[0], ' ');
+  }
+
+  // 4) Extract driver: after removing kurul, date, plate, find sequence of words (letters only) of length >=2
   if (!out.driver) {
-    const wordMatches = s.match(/([A-ZÇŞĞÜİÖ][a-zçşığüö]+(?:\s+[A-ZÇŞĞÜİÖ][a-zçşığüö]+){1,2})/g);
-    if (wordMatches && wordMatches.length) {
-      out.driver = wordMatches[0];
+    // split remaining text into tokens and find runs of alphabetic words
+    const tokens = s.split(/[^A-Za-zÇŞĞÜİÖçşğıüö]+/).filter(Boolean);
+    // find contiguous sequences of tokens with length >=2
+    let bestSeq = [];
+    let seq = [];
+    for (const t of tokens) {
+      // skip tokens that look like numbers or short abbreviations of length 1
+      if (/^\d+$/.test(t) || t.length === 1) {
+        if (seq.length >= 2 && seq.length > bestSeq.length) bestSeq = seq.slice();
+        seq = [];
+        continue;
+      }
+      seq.push(t);
+    }
+    if (seq.length >= 2 && seq.length > bestSeq.length) bestSeq = seq.slice();
+    if (bestSeq.length >= 2) {
+      // Title-case the driver name
+      out.driver = bestSeq.map(w => capitalizeWord(w)).join(' ');
     }
   }
 
