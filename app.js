@@ -4,6 +4,7 @@ const TABLE_NAME = 'Tespit';
 const configReady = Promise.resolve();
 
 const $ = (s, r = document) => r.querySelector(s);
+const toLocalISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -58,7 +59,9 @@ const DB = {
 
     if (isSyntheticRow) {
       const { id, ...data } = rec;
-      return this.req(`/rest/v1/${TABLE_NAME}?${filter}`, 'PATCH', { ...stripSyntheticId(data), durum: normalizeBool(data.durum ?? false) });
+      const [oK, oT, oP] = String(id).split('::');
+      const oldFilter = `kurul=eq.${encodeURIComponent(oK)}&tarih=eq.${encodeURIComponent(oT)}&plaka=eq.${encodeURIComponent(oP)}`;
+      return this.req(`/rest/v1/${TABLE_NAME}?${oldFilter}`, 'PATCH', { ...stripSyntheticId(data), durum: normalizeBool(data.durum ?? false) });
     }
 
     return this.req(`/rest/v1/${TABLE_NAME}`, 'POST', payload);
@@ -189,7 +192,7 @@ function openForm(rec = null) {
     const el = $(`#form [name="${k}"]`);
     if (el) el.value = rec?.[k] ?? '';
   });
-  if (!rec) f.elements.tarih.value = new Date().toISOString().slice(0, 10);
+  if (!rec) f.elements.tarih.value = toLocalISO(new Date());
   if (f.elements.plaka) {
     f.elements.plaka.addEventListener('input', e => {
       e.target.value = normalizePlateValue(e.target.value);
@@ -431,7 +434,7 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
   if (meta.plaka) setField('plaka', normalizePlateValue(meta.plaka));
   if (meta.tarih) {
     const d = parseDateString(meta.tarih);
-    if (d) setField('tarih', d.toISOString().slice(0,10));
+    if (d) setField('tarih', toLocalISO(d));
   }
   if (meta.driver) setField('driver', meta.driver);
 
@@ -483,13 +486,12 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
     }
   }
 
+  let noteAssigned = false;
   {
     let txt = preReadNoteContent || await readBestNote(pickedFiles) || '';
-    
+
     if (!txt && chosen) {
-      // If pre-read didn't work, try FileReader (for showDirectoryPicker path)
       try {
-        console.log('Reading chosen note file:', chosen.name);
         txt = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result || ''));
@@ -497,27 +499,18 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
           reader.readAsText(chosen);
         });
       } catch (e) {
-        console.warn('FileReader also failed; skipping note assignment:', e);
+        console.warn('Not dosyası okunamadı:', e);
       }
-    } else {
-      console.log('Using pre-read note content (len):', txt.length);
     }
-    
+
     if (txt) {
       txt = txt.replace(/\uFEFF/g, '').trim();
-      // assign in microtask and dispatch input
-      Promise.resolve().then(() => {
-        const formEl = $('#form');
-        if (formEl && formEl.elements && formEl.elements.not) {
-          formEl.elements.not.value = txt;
-          formEl.elements.not.dispatchEvent(new Event('input', { bubbles: true }));
-          console.log('Assigned note to form.elements.not (len):', txt.length);
-        } else {
-          const ta = $(`#form [name="not"]`);
-          if (ta) { ta.value = txt; ta.dispatchEvent(new Event('input', { bubbles: true })); console.log('Assigned via selector (len):', txt.length); }
-          else console.warn('Note textarea not found for assignment');
-        }
-      });
+      const ta = document.querySelector('#form textarea[name="not"]');
+      if (ta) {
+        ta.value = txt;
+        ta.dispatchEvent(new Event('input', { bubbles: true }));
+        noteAssigned = true;
+      }
     }
   }
 
@@ -525,7 +518,9 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
   files = { htt: [], fatura: [] };
   window.files = files;
   syncFileBoxes();
-  toast('Klasörden meta ve notlar dolduruldu. HTT/Fatura dosyalarını manuel ekleyin.');
+  toast(noteAssigned
+    ? 'Klasörden meta ve not dolduruldu. HTT/Fatura dosyalarını manuel ekleyin.'
+    : 'Meta dolduruldu ancak not okunamadı (not .txt bulunamadı ya da tarayıcı dosyayı okuyamadı).');
 }
 
 function parseMetaFromName(name) {
