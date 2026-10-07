@@ -418,36 +418,6 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
     }
   }
 
-  // --- Debug panel (visible on page) ---
-  try {
-    let dbg = document.getElementById('autoDebug');
-    if (!dbg) {
-      dbg = document.createElement('div');
-      dbg.id = 'autoDebug';
-      dbg.style.position = 'fixed';
-      dbg.style.right = '12px';
-      dbg.style.bottom = '12px';
-      dbg.style.background = 'rgba(0,0,0,0.7)';
-      dbg.style.color = '#fff';
-      dbg.style.padding = '10px';
-      dbg.style.fontSize = '12px';
-      dbg.style.zIndex = 9999;
-      dbg.style.maxWidth = '360px';
-      dbg.style.maxHeight = '50vh';
-      dbg.style.overflow = 'auto';
-      dbg.style.borderRadius = '6px';
-      document.body.appendChild(dbg);
-    }
-    dbg.innerHTML = `
-      <strong>Auto-load debug</strong><br>
-      <em>candidate:</em> ${esc(candidate)}<br>
-      <em>parsed:</em> ${esc(JSON.stringify(meta))}<br>
-      <em>files:</em> ${esc(pickedFiles.map(f=>f.name).join(', '))}<br>
-      <em>form kuruldu:</em> ${editing ? 'editing' : 'new'}<br>
-      <em>not:</em> ${esc((f.elements.not && f.elements.not.value) ? (f.elements.not.value.slice(0,200) + (f.elements.not.value.length>200? '...':'')) : '')}
-    `;
-  } catch (e) { console.warn('debug panel update failed', e); }
-
   // Only read .txt notes and metadata; DO NOT auto-attach PDFs (HTT/Fatura)
   // Strategy:
   // 1) Prefer files whose base filename equals 'not' (case-insensitive) or contains the standalone token 'not'.
@@ -521,15 +491,6 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
           const ta = $(`#form [name="not"]`);
           if (ta) { ta.value = txt; ta.dispatchEvent(new Event('input', { bubbles: true })); console.log('Assigned via selector (len):', txt.length); }
           else console.warn('Note textarea not found for assignment');
-        }
-        // update debug panel
-        const dbg = document.getElementById('autoDebug');
-        if (dbg) {
-          try {
-            const notPreview = `<em>not:</em> ${esc(txt.slice(0,200) + (txt.length>200? '...':''))}`;
-            if (/\<em>not:\<\/em\>/i.test(dbg.innerHTML || '')) dbg.innerHTML = dbg.innerHTML.replace(/(\<em>not:\<\/em\>)[^<]*/i, notPreview);
-            else dbg.innerHTML = (dbg.innerHTML || '') + '<br>' + notPreview;
-          } catch (e) { console.warn('dbg update failed', e); }
         }
       });
     }
