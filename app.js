@@ -403,20 +403,34 @@ async function processPickedFiles(pickedFiles, rootName) {
   for (const file of pickedFiles) {
     const name = file.name || '';
     const lname = name.toLowerCase();
+    console.log('Checking file for note:', name);
     if (lname.endsWith('.txt') && /\bnot\b/i.test(name)) {
       try {
+        console.log('Detected candidate not file:', name);
         let txt = await file.text();
+        console.log('Read note length for', name, txt ? txt.length : 0);
         // strip BOM and trim whitespace
         txt = String(txt || '').replace(/\uFEFF/g, '').trim();
-        // Ensure the form actually exists and has a 'not' element
-        const formEl = $('#form');
-        if (formEl && formEl.elements && formEl.elements.not) {
-          formEl.elements.not.value = txt;
-        } else {
-          // As a fallback, try to set via query selector
-          const ta = $(`#form [name="not"]`);
-          if (ta) ta.value = txt;
-        }
+        // Ensure the form actually exists and has a 'not' element; assign in microtask
+        const assignNote = () => {
+          const formEl = $('#form');
+          if (formEl && formEl.elements && formEl.elements.not) {
+            formEl.elements.not.value = txt;
+            // dispatch input event so any bindings update
+            formEl.elements.not.dispatchEvent(new Event('input', { bubbles: true }));
+            console.log('Assigned note to form.elements.not (length):', txt.length);
+          } else {
+            const ta = $(`#form [name="not"]`);
+            if (ta) {
+              ta.value = txt;
+              ta.dispatchEvent(new Event('input', { bubbles: true }));
+              console.log('Assigned note via selector (length):', txt.length);
+            } else {
+              console.warn('Note textarea not found in DOM to assign.');
+            }
+          }
+        };
+        Promise.resolve().then(assignNote);
         // update debug panel note preview immediately so user can see it
         const dbg = document.getElementById('autoDebug');
         if (dbg) {
