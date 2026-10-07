@@ -251,8 +251,32 @@ async function pickDirectoryFallbackAndProcess() {
         const files = [...input.files];
         console.log('Fallback picker selected files:', files.map(f=>f.name));
         toast(`${files.length} dosya seçildi (klasör fallback).`);
-        // Pass input reference so processPickedFiles can re-access it if needed
-        await processPickedFiles(files, /*rootName*/ null, input);
+        
+        // Pre-read note content while input.files is still accessible
+        let preReadNoteContent = null;
+        const notTxtFile = files.find(f => {
+          const lname = (f.name || '').toLowerCase();
+          const baseName = (f.name.split(/[\\/]/).pop() || '').toLowerCase();
+          const baseNoExt = baseName.replace(/\.[^.]+$/, '');
+          return lname.endsWith('.txt') && (baseNoExt === 'not' || /\bnot\b/i.test(baseNoExt));
+        });
+        
+        if (notTxtFile) {
+          try {
+            preReadNoteContent = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(String(reader.result || ''));
+              reader.onerror = () => reject(reader.error);
+              reader.readAsText(notTxtFile);
+            });
+            console.log('Pre-read note content in handler (len):', preReadNoteContent.length);
+          } catch (e) {
+            console.warn('Failed to pre-read note in handler:', e);
+          }
+        }
+        
+        // Pass files and pre-read note content
+        await processPickedFiles(files, /*rootName*/ null, preReadNoteContent);
       } catch (e) { console.error(e); }
       input.value = '';
       input.removeEventListener('change', handler);
@@ -318,7 +342,7 @@ async function pickDirectoryAndProcess() {
   }
 }
 
-async function processPickedFiles(pickedFiles, rootName, fallbackInput) {
+async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
   if (!pickedFiles || pickedFiles.length === 0) return;
   console.log('processPickedFiles called, rootName=', rootName, 'files=', pickedFiles.map(f=>f.name));
 
@@ -441,38 +465,26 @@ async function processPickedFiles(pickedFiles, rootName, fallbackInput) {
   }
 
   if (chosen) {
-    try {
-      console.log('Reading chosen note file:', chosen.name);
-      let txt = '';
+    let txt = preReadNoteContent || '';
+    
+    if (!txt) {
+      // If pre-read didn't work, try FileReader (for showDirectoryPicker path)
       try {
-        // Try FileReader first
+        console.log('Reading chosen note file:', chosen.name);
         txt = await new Promise((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = () => resolve(String(reader.result || ''));
           reader.onerror = () => reject(reader.error);
           reader.readAsText(chosen);
         });
-      } catch (readerErr) {
-        // FileReader failed (webkitdirectory perms issue). Try fallback via input.files re-access
-        console.warn('FileReader failed, trying fallback input.files access:', readerErr);
-        if (fallbackInput && fallbackInput.files) {
-          // Find the txt file in input.files by name
-          const notFile = [...fallbackInput.files].find(f => f.name === chosen.name);
-          if (notFile) {
-            txt = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(String(reader.result || ''));
-              reader.onerror = () => reject(reader.error);
-              reader.readAsText(notFile);
-            });
-            console.log('Successfully read via fallback input.files');
-          } else {
-            throw new Error('Note file not found in fallback input.files');
-          }
-        } else {
-          throw readerErr;
-        }
+      } catch (e) {
+        console.warn('FileReader also failed; skipping note assignment:', e);
       }
+    } else {
+      console.log('Using pre-read note content (len):', txt.length);
+    }
+    
+    if (txt) {
       txt = txt.replace(/\uFEFF/g, '').trim();
       // assign in microtask and dispatch input
       Promise.resolve().then(() => {
@@ -496,7 +508,7 @@ async function processPickedFiles(pickedFiles, rootName, fallbackInput) {
           } catch (e) { console.warn('dbg update failed', e); }
         }
       });
-    } catch (e) { console.warn('Failed to read chosen note file', e); }
+    }
   }
 
   // Ensure PDF lists remain empty so user can add them manually
