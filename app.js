@@ -67,6 +67,10 @@ const DB = {
     return this.req(`/rest/v1/${TABLE_NAME}`, 'POST', payload);
   },
   async remove(id) {
+    if (isSyntheticId(id)) {
+      const [k, t, p] = String(id).split('::');
+      return this.req(`/rest/v1/${TABLE_NAME}?kurul=eq.${encodeURIComponent(k)}&tarih=eq.${encodeURIComponent(t)}&plaka=eq.${encodeURIComponent(p)}`, 'DELETE');
+    }
     return this.req(`/rest/v1/${TABLE_NAME}?id=eq.${encodeURIComponent(id)}`, 'DELETE');
   }
 };
