@@ -323,6 +323,7 @@ async function pickDirectoryAndProcess() {
       const dir = await window.showDirectoryPicker();
       toast(`Klasör seçildi: ${dir.name}`);
       const files = [];
+      let failedReads = 0;
       async function recurse(d, prefix = '') {
         for await (const [name, handle] of d.entries()) {
           try {
@@ -334,6 +335,7 @@ async function pickDirectoryAndProcess() {
                 files.push(f);
               } catch (fe) {
                 console.warn('file read failed', name, fe);
+                failedReads++;
                 continue;
               }
             } else if (handle.kind === 'directory') {
@@ -341,13 +343,22 @@ async function pickDirectoryAndProcess() {
             }
           } catch (entErr) {
             console.warn('entry iteration failed', name, entErr);
+            failedReads++;
             continue;
           }
         }
       }
       await recurse(dir);
       console.log('Picked files from showDirectoryPicker:', files.map(f=>f.name));
-      toast(`${files.length} dosya bulundu.`);
+      toast(`${files.length} dosya bulundu. (${failedReads} okunamadı)`);
+      if (files.length === 0 && failedReads > 0) {
+        // If none of the files could be read via the File System Access API, fall back
+        // to the webkitdirectory input — some environments/windows setups may restrict reads.
+        console.warn('All showDirectoryPicker reads failed; falling back to input[webkitdirectory]');
+        toast('Klasörden okuma başarısız oldu, lütfen klasörü manuel olarak seçin.');
+        await pickDirectoryFallbackAndProcess();
+        return;
+      }
       await processPickedFiles(files, dir.name);
     } catch (e) {
       console.error(e);
