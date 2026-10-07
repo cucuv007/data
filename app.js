@@ -1,5 +1,9 @@
-const SUPABASE_URL = 'https://rcvyytkxcgmydkcicxdz.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SECRET_KEY || 'YOUR_SECRET_KEY_HERE';
+const SUPABASE_URL = typeof process !== 'undefined' && process.env.SUPABASE_URL
+  ? process.env.SUPABASE_URL
+  : 'https://rcvyytkxcgmydkcicxdz.supabase.co';
+const SUPABASE_KEY = typeof process !== 'undefined' && process.env.SUPABASE_SECRET_KEY
+  ? process.env.SUPABASE_SECRET_KEY
+  : 'YOUR_VERCEL_SECRET_KEY_HERE';
 const TABLE_NAME = 'Tespit';
 const STORAGE_BUCKET = 'evrak_files';
 
