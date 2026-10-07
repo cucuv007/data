@@ -297,11 +297,12 @@ async function pickDirectoryAndProcess() {
       await recurse(dir);
       console.log('Picked files from showDirectoryPicker:', files.map(f=>f.name));
       toast(`${files.length} dosya bulundu. (${failedReads} okunamadı)`);
-      if (files.length === 0 && failedReads > 0) {
-        // If none of the files could be read via the File System Access API, fall back
-        // to the webkitdirectory input — some environments/windows setups may restrict reads.
-        console.warn('All showDirectoryPicker reads failed; falling back to input[webkitdirectory]');
-        toast('Klasörden okuma başarısız oldu, lütfen klasörü manuel olarak seçin.');
+      // If any reads failed it's often an environment/browser permission issue.
+      // In that case proactively open the fallback input so the user doesn't need
+      // to re-select the folder manually.
+      if (failedReads > 0) {
+        console.warn('Some showDirectoryPicker reads failed; invoking fallback input');
+        toast('Bazı dosyalar okunamadı; alternatif seçim penceresi açılıyor...');
         await pickDirectoryFallbackAndProcess();
         return;
       }
@@ -407,22 +408,31 @@ async function processPickedFiles(pickedFiles, rootName) {
         let txt = await file.text();
         // strip BOM and trim whitespace
         txt = String(txt || '').replace(/\uFEFF/g, '').trim();
-        f.elements.not.value = txt;
+        // Ensure the form actually exists and has a 'not' element
+        const formEl = $('#form');
+        if (formEl && formEl.elements && formEl.elements.not) {
+          formEl.elements.not.value = txt;
+        } else {
+          // As a fallback, try to set via query selector
+          const ta = $(`#form [name="not"]`);
+          if (ta) ta.value = txt;
+        }
         // update debug panel note preview immediately so user can see it
         const dbg = document.getElementById('autoDebug');
         if (dbg) {
           try {
-            // replace the not line if present, else append
-            const cur = dbg.innerHTML || '';
+            // replace or append not preview
             const notPreview = `<em>not:</em> ${esc(txt.slice(0,200) + (txt.length>200? '...':''))}`;
-            if (/\<em>not:\<\/em\>/i.test(cur)) {
-              dbg.innerHTML = cur.replace(/\<em>not:\<\/em\>[^<]*/i, notPreview);
+            if (/\<em>not:\<\/em\>/i.test(dbg.innerHTML || '')) {
+              dbg.innerHTML = dbg.innerHTML.replace(/(\<em>not:\<\/em\>)[^<]*/i, notPreview);
             } else {
-              dbg.innerHTML = cur + '<br>' + notPreview;
+              dbg.innerHTML = (dbg.innerHTML || '') + '<br>' + notPreview;
             }
           } catch (e) { console.warn('dbg update failed', e); }
         }
-      } catch (e) { }
+        // only interested in the first matching note file
+        break;
+      } catch (e) { console.warn('Failed reading note file', e); }
     }
   }
 
