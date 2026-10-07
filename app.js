@@ -1,23 +1,40 @@
 let SUPABASE_URL = 'https://rcvyytkxcgmydkcicxdz.supabase.co';
-let SUPABASE_KEY = 'sb_secret_a-f0SudXtfIqY2CNXEbH5Q_wNpHnTRY'; // Local development
+let SUPABASE_KEY = ''; // Will be set from .env.local (local) or Vercel env (production)
 const TABLE_NAME = 'Tespit';
 const STORAGE_BUCKET = 'evrak_files';
 
-// Vercel'de deploy edilirse, /api/config'den değerleri al
+// Load configuration on startup
 (async () => {
   try {
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      // Production - config endpoint'ten al
+    const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+    
+    if (isProduction) {
+      // Production (Vercel) - Use API endpoint to get publishable key
+      // Secret key stays on backend only
       const res = await fetch('/api/config');
       if (res.ok) {
         const config = await res.json();
         SUPABASE_URL = config.supabaseUrl || SUPABASE_URL;
-        // Secret key browser'dan erişilmemeli, server-side proxy kullan
         console.log('Config loaded from Vercel');
+      }
+    } else {
+      // Local development - Load from .env.local if it exists
+      try {
+        const envRes = await fetch('.env.local');
+        if (envRes.ok) {
+          const envText = await envRes.text();
+          const keyMatch = envText.match(/SUPABASE_SECRET_KEY\s*=\s*([^\n\r]+)/);
+          if (keyMatch) {
+            SUPABASE_KEY = keyMatch[1].trim();
+            console.log('Loaded SUPABASE_KEY from .env.local');
+          }
+        }
+      } catch (e) {
+        console.warn('Could not load .env.local:', e);
       }
     }
   } catch (e) {
-    console.warn('Could not load config from /api/config:', e);
+    console.warn('Error loading configuration:', e);
   }
 })();
 
