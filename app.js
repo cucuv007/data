@@ -442,8 +442,17 @@ async function processPickedFiles(pickedFiles, rootName) {
   if (chosen) {
     try {
       console.log('Reading chosen note file:', chosen.name);
-      let txt = await chosen.text();
-      txt = String(txt || '').replace(/\uFEFF/g, '').trim();
+      // Use FileReader for webkitdirectory compatibility (fallback input)
+      let txt = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ''));
+        reader.onerror = () => {
+          console.warn('FileReader error:', reader.error);
+          reject(reader.error);
+        };
+        reader.readAsText(chosen);
+      });
+      txt = txt.replace(/\uFEFF/g, '').trim();
       // assign in microtask and dispatch input
       Promise.resolve().then(() => {
         const formEl = $('#form');
