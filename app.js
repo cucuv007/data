@@ -400,54 +400,73 @@ async function processPickedFiles(pickedFiles, rootName) {
   } catch (e) { console.warn('debug panel update failed', e); }
 
   // Only read .txt notes and metadata; DO NOT auto-attach PDFs (HTT/Fatura)
+  // Strategy:
+  // 1) Prefer files whose base filename equals 'not' (case-insensitive) or contains the standalone token 'not'.
+  // 2) If none found, pick the longest .txt file as a fallback.
+  let txtCandidates = [];
   for (const file of pickedFiles) {
     const name = file.name || '';
     const lname = name.toLowerCase();
-    console.log('Checking file for note:', name);
-    if (lname.endsWith('.txt') && /\bnot\b/i.test(name)) {
-      try {
-        console.log('Detected candidate not file:', name);
-        let txt = await file.text();
-        console.log('Read note length for', name, txt ? txt.length : 0);
-        // strip BOM and trim whitespace
-        txt = String(txt || '').replace(/\uFEFF/g, '').trim();
-        // Ensure the form actually exists and has a 'not' element; assign in microtask
-        const assignNote = () => {
-          const formEl = $('#form');
-          if (formEl && formEl.elements && formEl.elements.not) {
-            formEl.elements.not.value = txt;
-            // dispatch input event so any bindings update
-            formEl.elements.not.dispatchEvent(new Event('input', { bubbles: true }));
-            console.log('Assigned note to form.elements.not (length):', txt.length);
-          } else {
-            const ta = $(`#form [name="not"]`);
-            if (ta) {
-              ta.value = txt;
-              ta.dispatchEvent(new Event('input', { bubbles: true }));
-              console.log('Assigned note via selector (length):', txt.length);
-            } else {
-              console.warn('Note textarea not found in DOM to assign.');
-            }
-          }
-        };
-        Promise.resolve().then(assignNote);
-        // update debug panel note preview immediately so user can see it
+    console.log('Checking file for note candidate:', name);
+    if (!lname.endsWith('.txt')) continue;
+    // derive base filename (without path and extension)
+    const baseName = (name.split(/[\\/]/).pop() || '').toLowerCase();
+    const baseNoExt = baseName.replace(/\.[^.]+$/, '');
+    // If base is exactly 'not' or contains token ' not ' etc., prefer it
+    if (baseNoExt === 'not' || /\bnot\b/i.test(baseNoExt)) {
+      txtCandidates.push({ file, score: 100 });
+      console.log('Marked as strong note candidate:', name);
+      continue;
+    }
+    // otherwise, collect as weaker candidate (length-based later)
+    txtCandidates.push({ file, score: 1 });
+  }
+
+  // If we have any strong candidates (score 100), pick the first one; else pick the longest .txt
+  let chosen = null;
+  if (txtCandidates.length) {
+    const strong = txtCandidates.filter(c => c.score === 100);
+    if (strong.length) chosen = strong[0].file;
+    else {
+      // choose by largest file size (if available) or by name length
+      txtCandidates.sort((a, b) => {
+        const sa = (a.file.size || 0);
+        const sb = (b.file.size || 0);
+        if (sb !== sa) return sb - sa;
+        return b.file.name.length - a.file.name.length;
+      });
+      chosen = txtCandidates[0].file;
+    }
+  }
+
+  if (chosen) {
+    try {
+      console.log('Reading chosen note file:', chosen.name);
+      let txt = await chosen.text();
+      txt = String(txt || '').replace(/\uFEFF/g, '').trim();
+      // assign in microtask and dispatch input
+      Promise.resolve().then(() => {
+        const formEl = $('#form');
+        if (formEl && formEl.elements && formEl.elements.not) {
+          formEl.elements.not.value = txt;
+          formEl.elements.not.dispatchEvent(new Event('input', { bubbles: true }));
+          console.log('Assigned note to form.elements.not (len):', txt.length);
+        } else {
+          const ta = $(`#form [name="not"]`);
+          if (ta) { ta.value = txt; ta.dispatchEvent(new Event('input', { bubbles: true })); console.log('Assigned via selector (len):', txt.length); }
+          else console.warn('Note textarea not found for assignment');
+        }
+        // update debug panel
         const dbg = document.getElementById('autoDebug');
         if (dbg) {
           try {
-            // replace or append not preview
             const notPreview = `<em>not:</em> ${esc(txt.slice(0,200) + (txt.length>200? '...':''))}`;
-            if (/\<em>not:\<\/em\>/i.test(dbg.innerHTML || '')) {
-              dbg.innerHTML = dbg.innerHTML.replace(/(\<em>not:\<\/em\>)[^<]*/i, notPreview);
-            } else {
-              dbg.innerHTML = (dbg.innerHTML || '') + '<br>' + notPreview;
-            }
+            if (/\<em>not:\<\/em\>/i.test(dbg.innerHTML || '')) dbg.innerHTML = dbg.innerHTML.replace(/(\<em>not:\<\/em\>)[^<]*/i, notPreview);
+            else dbg.innerHTML = (dbg.innerHTML || '') + '<br>' + notPreview;
           } catch (e) { console.warn('dbg update failed', e); }
         }
-        // only interested in the first matching note file
-        break;
-      } catch (e) { console.warn('Failed reading note file', e); }
-    }
+      });
+    } catch (e) { console.warn('Failed to read chosen note file', e); }
   }
 
   // Ensure PDF lists remain empty so user can add them manually
