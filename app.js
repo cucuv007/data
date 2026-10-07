@@ -989,17 +989,24 @@ async function uploadFile(blob) {
   const ext = blob.type.includes('pdf') ? '.pdf' : blob.type.includes('jpeg') || blob.type.includes('jpg') ? '.jpg' : blob.type.includes('png') ? '.png' : '';
   const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`;
   
-  // Upload to Supabase Storage
-  const formData = new FormData();
-  formData.append('file', blob, filename);
+  // Upload to Supabase Storage using REST API
+  // POST /storage/v1/object/{bucketName}/{fileName}
+  const url = `${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${filename}`;
   
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${filename}`, {
+  const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${SUPABASE_KEY}` },
-    body: formData
+    headers: {
+      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Content-Type': blob.type || 'application/octet-stream'
+    },
+    body: blob
   });
   
-  if (!res.ok) throw new Error('Dosya yükleme başarısız');
+  if (!res.ok) {
+    const errText = await res.text();
+    console.error('Upload error:', res.status, errText);
+    throw new Error(`Dosya yükleme başarısız (${res.status}): ${errText}`);
+  }
   
   // Return public URL
   return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${filename}`;
