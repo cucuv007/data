@@ -393,7 +393,8 @@ async function processPickedFiles(pickedFiles, rootName) {
       <em>candidate:</em> ${esc(candidate)}<br>
       <em>parsed:</em> ${esc(JSON.stringify(meta))}<br>
       <em>files:</em> ${esc(pickedFiles.map(f=>f.name).join(', '))}<br>
-      <em>form kuruldu:</em> ${editing ? 'editing' : 'new'}
+      <em>form kuruldu:</em> ${editing ? 'editing' : 'new'}<br>
+      <em>not:</em> ${esc((f.elements.not && f.elements.not.value) ? (f.elements.not.value.slice(0,200) + (f.elements.not.value.length>200? '...':'')) : '')}
     `;
   } catch (e) { console.warn('debug panel update failed', e); }
 
@@ -403,8 +404,24 @@ async function processPickedFiles(pickedFiles, rootName) {
     const lname = name.toLowerCase();
     if (lname.endsWith('.txt') && /\bnot\b/i.test(name)) {
       try {
-        const txt = await file.text();
+        let txt = await file.text();
+        // strip BOM and trim whitespace
+        txt = String(txt || '').replace(/\uFEFF/g, '').trim();
         f.elements.not.value = txt;
+        // update debug panel note preview immediately so user can see it
+        const dbg = document.getElementById('autoDebug');
+        if (dbg) {
+          try {
+            // replace the not line if present, else append
+            const cur = dbg.innerHTML || '';
+            const notPreview = `<em>not:</em> ${esc(txt.slice(0,200) + (txt.length>200? '...':''))}`;
+            if (/\<em>not:\<\/em\>/i.test(cur)) {
+              dbg.innerHTML = cur.replace(/\<em>not:\<\/em\>[^<]*/i, notPreview);
+            } else {
+              dbg.innerHTML = cur + '<br>' + notPreview;
+            }
+          } catch (e) { console.warn('dbg update failed', e); }
+        }
       } catch (e) { }
     }
   }
@@ -452,6 +469,10 @@ function parseMetaFromName(name) {
 
   // 4) Extract driver: after removing kurul, date, plate, find sequence of words (letters only) of length >=2
   if (!out.driver) {
+    // Remove common noisy suffixes that often land in the driver field
+    s = s.replace(/\b(faturali|fatural[iı]|fatura|faturalar|fatural[ıi]|faturali|invoice)\b/ig, ' ');
+    s = s.replace(/\b(üst\s*yaz[iı](?:\s*yaz[iı]l[ıi]?)?)\b/ig, ' ');
+    s = s.replace(/\b(hemencecik|eklenmiştir|eklenmis)\b/ig, ' ');
     // split remaining text into tokens and find runs of alphabetic words
     const tokens = s.split(/[^A-Za-zÇŞĞÜİÖçşğıüö]+/).filter(Boolean);
     // find contiguous sequences of tokens with length >=2
@@ -469,7 +490,9 @@ function parseMetaFromName(name) {
     if (seq.length >= 2 && seq.length > bestSeq.length) bestSeq = seq.slice();
     if (bestSeq.length >= 2) {
       // Title-case the driver name
-      out.driver = bestSeq.map(w => capitalizeWord(w)).join(' ');
+      // filter out any remaining noise words and short tokens, then title-case
+      const cleaned = bestSeq.filter(w => !/^\d+$/.test(w) && w.length > 1 && !/^(faturali|fatura|üst|yazı|yazildi|yazıldı)$/i.test(w));
+      out.driver = cleaned.map(w => capitalizeWord(w)).join(' ');
     }
   }
 
