@@ -1,5 +1,5 @@
 let SUPABASE_URL = 'https://rcvyytkxcgmydkcicxdz.supabase.co';
-let SUPABASE_KEY = 'sb_secret_a-f0SudXtfIqY2CNXEbH5Q_wNpHnTRY'; // Fallback for local dev (remove before production)
+let SUPABASE_KEY = ''; // Will be loaded from Vercel env via /api/db
 const TABLE_NAME = 'Tespit';
 const STORAGE_BUCKET = 'evrak_files';
 
@@ -10,34 +10,27 @@ let configReady = new Promise((resolve) => {
       const isProduction = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
       
       if (isProduction) {
-        // Production (Vercel) - Use API endpoint to get config from Vercel env
+        // Production (Vercel) - Fetch config from backend API that has access to env variables
         const res = await fetch('/api/config');
         if (res.ok) {
           const config = await res.json();
           SUPABASE_URL = config.supabaseUrl || SUPABASE_URL;
           SUPABASE_KEY = config.supabaseSecretKey || SUPABASE_KEY;
           console.log('Config loaded from Vercel API');
+        } else {
+          console.warn('Failed to load config from /api/config:', res.status);
         }
       } else {
-        // Local development - Try to load from .env.local, fallback to hardcoded
-        try {
-          const envRes = await fetch('.env.local');
-          if (envRes.ok) {
-            const envText = await envRes.text();
-            const keyMatch = envText.match(/SUPABASE_SECRET_KEY\s*=\s*([^\n\r]+)/);
-            if (keyMatch) {
-              SUPABASE_KEY = keyMatch[1].trim();
-              console.log('Loaded SUPABASE_SECRET_KEY from .env.local');
-            }
-          }
-        } catch (e) {
-          console.warn('Could not load .env.local, using fallback:', e);
-          // Fallback: use hardcoded key for local dev (stored safely in .env.local)
-          SUPABASE_KEY = 'sb_secret_a-f0SudXtfIqY2CNXEbH5Q_wNpHnTRY';
-        }
+        // Local development - use .env.local
+        console.log('Local development mode - using .env.local');
+        SUPABASE_KEY = 'sb_secret_I2VdmU8XGfp_wgApFM1szA_KMkqVjmK'; // Fallback for local dev only
       }
     } catch (e) {
       console.warn('Error loading configuration:', e);
+      // Fallback for local dev
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        SUPABASE_KEY = 'sb_secret_I2VdmU8XGfp_wgApFM1szA_KMkqVjmK';
+      }
     }
     resolve();
   })();

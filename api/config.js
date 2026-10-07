@@ -1,9 +1,8 @@
 // /api/config.js
-// Vercel serverless function - environment variables'ı güvenli şekilde return et
+// Vercel serverless function - Supabase config'ı return et
 
 export default function handler(req, res) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', process.env.VERCEL_URL || '*');
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
 
   if (req.method === 'OPTIONS') {
@@ -16,10 +15,12 @@ export default function handler(req, res) {
     return;
   }
 
-  // Publishable key'i return et (public, güvenli)
-  // Secret key'i return ETMEDİK - sadece Vercel'de server-side kullanılır
-  res.status(200).json({
-    supabaseUrl: process.env.SUPABASE_URL,
-    supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY
-  });
+  // Vercel environment variables'dan oku
+  const config = {
+    supabaseUrl: process.env.SUPABASE_URL || 'https://rcvyytkxcgmydkcicxdz.supabase.co',
+    supabaseSecretKey: process.env.SUPABASE_SECRET_KEY || '',
+    supabasePublishableKey: process.env.SUPABASE_PUBLISHABLE_KEY || ''
+  };
+
+  res.status(200).json(config);
 }
