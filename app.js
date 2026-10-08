@@ -35,7 +35,7 @@ const DB = {
   },
   async all() {
     const rows = await this.req(`/rest/v1/${TABLE_NAME}?select=*`);
-    return rows.map(r => ({ ...r, id: r.id ?? recKey(r), durum: normalizeBool(r.durum) }));
+    return rows.map(r => ({ ...r, id: r.id ?? recKey(r), durum: normalizeBool(r.durum), member: normalizeBool(r.member) }));
   },
   async save(rec) {
     const isUpdate = !!rec.id && !isSyntheticId(rec.id);
@@ -203,6 +203,7 @@ function openForm(rec = null) {
     }, { once: true });
   }
   if (f.elements.durum) f.elements.durum.checked = normalizeBool(rec?.durum ?? false);
+  if (f.elements.member) f.elements.member.checked = normalizeBool(rec?.member ?? false);
   
   files = { htt: [], fatura: [] };
   if (rec) {
@@ -650,7 +651,8 @@ $('#form').addEventListener('submit', async e => {
       tarih: f.tarih.value,
       driver: f.driver.value.trim(),
       not: f.not.value.trim(),
-      durum: !!(f.durum ? f.durum.checked : false)
+      durum: !!(f.durum ? f.durum.checked : false),
+      member: !!(f.member ? f.member.checked : false)
     };
 
     // Dosyaları yükle
