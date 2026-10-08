@@ -126,6 +126,13 @@ tr[data-status="true"]:hover {
 tr[data-status="true"].sel {
   background: color-mix(in srgb, #f4b942 35%, white 65%);
 }
+tr[data-status="true"] td.kurul,
+tr[data-status="true"] td.driver,
+tr[data-status="true"] td.plaka,
+tr[data-status="true"] td.tarih,
+tr[data-status="true"] td.note {
+  color: #14232b;
+}
 td.note { color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 td.date { white-space: nowrap; color: var(--muted); }
 td.driver { font-weight: 600; }
@@ -201,6 +208,11 @@ td.act .btn { margin-left: 4px; }
 .btn.primary { background: var(--brand); color: var(--brand-ink); }
 .btn.ghost { border-color: var(--line); background: var(--surface); }
 .btn.small { min-height: 38px; padding: 0 14px; font-size: .9rem; }
+#noteBtn, #noteBtn.ghost {
+  color: #fff;
+  background: var(--brand);
+  border-color: var(--brand);
+}
 .btn.danger {
   color: #fff;
   background: linear-gradient(180deg, #d93d36 0%, #b3261e 100%);
