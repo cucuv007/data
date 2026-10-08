@@ -225,6 +225,18 @@ td.act .btn { margin-left: 4px; }
   border-color: #b3261e;
   box-shadow: 0 1px 0 rgba(179, 38, 30, .25);
 }
+.tools .flag-row { display: flex; gap: 8px; }
+.tools .flag-row .btn { flex: 1; width: auto; }
+#memberBtn {
+  color: var(--ink);
+  background: var(--surface);
+  border-color: var(--line);
+}
+#memberBtn[aria-pressed="true"] {
+  color: #fff;
+  background: var(--brand);
+  border-color: var(--brand);
+}
 .link { background: none; border: 0; color: var(--brand); padding: 8px 4px; font-weight: 600; text-decoration: none; font-size: .92rem; }
 .link.danger { color: var(--danger); }
 .icon { background: none; border: 0; font-size: 1.1rem; width: 44px; height: 44px; border-radius: 10px; color: var(--muted); }

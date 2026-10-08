@@ -84,6 +84,7 @@ let viewUrl = null;
 /* ---------- Liste ---------- */
 let applied = {};
 let sorunluFilterActive = false;
+let memberFilterActive = false;
 const tr = s => String(s ?? '').toLocaleLowerCase('tr');
 const plakaKey = s => tr(s).replace(/\s+/g, '');
 const rowId = r => String(r?.id ?? recKey(r));
@@ -103,6 +104,15 @@ function updateSorunluButton() {
   btn.classList.remove('ghost', 'primary');
   btn.classList.add('danger');
   btn.setAttribute('aria-pressed', String(sorunluFilterActive));
+  updateMemberButton();
+}
+
+function updateMemberButton() {
+  const btn = $('#memberBtn');
+  if (!btn) return;
+  const n = records.filter(r => normalizeBool(r.member)).length;
+  btn.textContent = `Dernek Üyesi${memberFilterActive ? ` (${n})` : ''}`;
+  btn.setAttribute('aria-pressed', String(memberFilterActive));
 }
 
 function readFilters() {
@@ -123,6 +133,7 @@ function matches(r, f) {
   if (f.htt && (f.htt === 'var') !== !!r.htt) return false;
   if (f.fatura && (f.fatura === 'var') !== !!r.fatura) return false;
   if (sorunluFilterActive && !normalizeBool(r.durum)) return false;
+  if (memberFilterActive && !normalizeBool(r.member)) return false;
   return true;
 }
 const fmtDate = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('tr-TR', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
@@ -743,9 +754,15 @@ function listeleHepsi() {
   $('#q').value = '';
   $$('#adv input, #adv select').forEach(el => el.value = '');
   sorunluFilterActive = false;
+  memberFilterActive = false;
   updateSorunluButton();
   return ara();
 }
+window.toggleMemberFilter = function () {
+  memberFilterActive = !memberFilterActive;
+  updateSorunluButton();
+  ara();
+};
 window.toggleSorunluFilter = function () {
   sorunluFilterActive = !sorunluFilterActive;
   updateSorunluButton();
