@@ -1,47 +1,66 @@
-// /api/db.js
-// Database proxy - secret key server'da sakla, client'tan erişilmesini engelle
+const auth = require('./_auth');
 
-const ALLOWED_PREFIX = '/rest/v1/Tespit';
-const ALLOWED_METHODS = ['GET', 'POST', 'PATCH', 'DELETE'];
+const PATH_RE = /^\/rest\/v1\/Tespit(\?[A-Za-z0-9_=&.%:*,()+!~'-]{0,600})?$/;
+const METHODS = new Set(['GET', 'POST', 'PATCH', 'DELETE']);
+const COLUMNS = ['kurul', 'plaka', 'tarih', 'driver', 'not', 'htt', 'fatura', 'durum', 'member'];
+
+function cleanBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
+  const out = {};
+  for (const k of COLUMNS) {
+    if (!(k in body)) continue;
+    const v = body[k];
+    if (k === 'durum' || k === 'member') out[k] = v === true || v === 'true';
+    else if (v === null || typeof v === 'string') out[k] = v === null ? null : v.slice(0, 20000);
+  }
+  return out;
+}
 
 module.exports = async function handler(req, res) {
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' });
-    return;
+  if (!auth.requireUser(req, res, 'POST')) return;
+
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY;
+  if (!url || !key) return auth.send(res, 500, { error: 'Sunucu yapılandırması eksik.' });
+
+  let payload = req.body;
+  if (typeof payload === 'string') {
+    try { payload = JSON.parse(payload); } catch (e) { payload = null; }
   }
-  const SUPABASE_URL = process.env.SUPABASE_URL;
-  const KEY = process.env.SUPABASE_SECRET_KEY;
-  if (!SUPABASE_URL || !KEY) {
-    res.status(500).json({ error: 'SUPABASE_URL / SUPABASE_SECRET_KEY eksik' });
-    return;
+  const { path, method = 'GET', body = null } = payload || {};
+
+  if (typeof path !== 'string' || !PATH_RE.test(path) || path.includes('..')) {
+    return auth.send(res, 403, { error: 'İzin verilmeyen istek.' });
   }
+  if (!METHODS.has(method)) return auth.send(res, 403, { error: 'İzin verilmeyen istek.' });
+  if ((method === 'PATCH' || method === 'DELETE') && !/[?&][A-Za-z_]+=eq\./.test(path)) {
+    return auth.send(res, 403, { error: 'Filtresiz değişiklik yapılamaz.' });
+  }
+
+  const headers = { apikey: key, Authorization: `Bearer ${key}` };
+  const opts = { method, headers, signal: AbortSignal.timeout(20000) };
+  if (method === 'POST' || method === 'PATCH') {
+    const data = cleanBody(body);
+    if (!data || !Object.keys(data).length) return auth.send(res, 400, { error: 'Geçersiz veri.' });
+    headers['Content-Type'] = 'application/json';
+    headers.Prefer = 'return=representation';
+    opts.body = JSON.stringify(data);
+  }
+
   try {
-    let payload = req.body;
-    if (typeof payload === 'string') payload = JSON.parse(payload || '{}');
-    const { path, method = 'GET', body = null } = payload || {};
-    if (typeof path !== 'string' || !(path === ALLOWED_PREFIX || path.startsWith(ALLOWED_PREFIX + '?'))) {
-      res.status(403).json({ error: 'Path izinli değil' });
-      return;
-    }
-    if (!ALLOWED_METHODS.includes(method)) {
-      res.status(403).json({ error: 'Method izinli değil' });
-      return;
-    }
-    const headers = { apikey: KEY, Authorization: `Bearer ${KEY}`, Prefer: 'return=representation' };
-    const opts = { method, headers };
-    if (body) {
-      headers['Content-Type'] = 'application/json';
-      opts.body = JSON.stringify(body);
-    }
-    const r = await fetch(`${SUPABASE_URL}${path}`, opts);
+    const r = await fetch(`${url}${path}`, opts);
     const text = await r.text();
     if (!r.ok) {
-      res.status(r.status).json({ error: text });
-      return;
+      console.error('db upstream', r.status, text.slice(0, 300));
+      const duplicate = r.status === 409;
+      return auth.send(res, duplicate ? 409 : 502, {
+        error: duplicate ? 'Bu kayıt zaten mevcut.' : 'Veritabanı isteği başarısız.'
+      });
     }
-    res.status(200).json(text ? JSON.parse(text) : null);
+    res.setHeader('Cache-Control', 'no-store');
+    return res.status(200).json(text ? JSON.parse(text) : null);
   } catch (e) {
-    console.error('db proxy error:', e);
-    res.status(500).json({ error: String(e.message || e) });
+    console.error('db error', e && e.message);
+    return auth.send(res, 500, { error: 'İstek işlenemedi.' });
   }
 };

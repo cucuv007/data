@@ -45,7 +45,6 @@ body {
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2 { margin: 0; }
 
-/* Üst bar */
 .top {
   position: sticky; top: 0; z-index: 5;
   background: var(--bg);
@@ -69,14 +68,13 @@ h1, h2 { margin: 0; }
 @media (min-width: 900px) { .adv-grid { grid-template-columns: repeat(4, 1fr); } .adv .wide { grid-column: span 2; } }
 .adv-foot { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 14px; }
 @media (min-width: 560px) { .adv-foot { display: flex; justify-content: flex-end; } .adv-foot .btn { min-width: 120px; } }
-.top:has(#adv:not([hidden])) { position: static; } /* panel açıkken başlık sabit kalmasın */
+.top:has(#adv:not([hidden])) { position: static; }
 .field { display: grid; gap: 6px; }
 .field > span { font-size: .88rem; font-weight: 600; color: var(--muted); }
 
 input, select, textarea { font: inherit; color: inherit; }
 h1, h2 { margin: 0; }
 
-/* Üst bar */
 .top {
   position: sticky; top: 0; z-index: 5;
   background: var(--bg);
@@ -106,7 +104,6 @@ button:focus-visible, .btn:focus-within, a:focus-visible {
   outline: 2px solid var(--brand); outline-offset: 2px;
 }
 
-/* Liste (masaüstünde tablo, telefonda kart) */
 main { max-width: 1400px; margin: 0 auto; padding: 14px 16px 0; }
 .top-row, .tools { max-width: 1400px; }
 .table-wrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; width: 100%; }
@@ -183,7 +180,6 @@ td.act .btn { margin-left: 4px; }
   td:empty, td.note:empty { display: none; }
 }
 
-/* Sağ tık menüsü */
 .ctx {
   position: fixed; z-index: 60; min-width: 190px;
   background: var(--surface); border: 1px solid var(--line);
@@ -198,7 +194,6 @@ td.act .btn { margin-left: 4px; }
 .small-sheet { max-width: 480px; }
 .note-text { white-space: pre-wrap; word-break: break-word; margin: 0; color: var(--ink); }
 
-/* Butonlar */
 .btn, .link, .icon, .fab { cursor: pointer; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -249,7 +244,6 @@ td.act .btn { margin-left: 4px; }
   font-weight: 700; box-shadow: 0 6px 18px rgba(0,0,0,.25);
 }
 
-/* Form penceresi */
 dialog { border: 0; padding: 0; color: var(--ink); background: var(--surface); }
 dialog::backdrop { background: rgba(8,16,20,.55); }
 .sheet {
@@ -295,7 +289,6 @@ dialog::backdrop { background: rgba(8,16,20,.55); }
 .file.has .file-name { color: var(--ink); font-weight: 600; }
 .file:not(.has) [data-view], .file:not(.has) [data-remove] { display: none; }
 
-/* Görüntüleyici */
 .viewer { width: 100%; height: 100dvh; max-width: none; max-height: none; margin: 0; }
 .viewer[open] { display: flex; flex-direction: column; }
 .view-body { flex: 1; min-height: 0; background: var(--bg); display: flex; align-items: center; justify-content: center; overflow: auto; }
@@ -305,7 +298,6 @@ dialog::backdrop { background: rgba(8,16,20,.55); }
   .viewer { width: min(900px, 94vw); height: 90dvh; margin: auto; border-radius: 16px; }
 }
 
-/* Bildirim */
 .toast {
   position: fixed; left: 50%; bottom: calc(86px + env(safe-area-inset-bottom, 0px));
   transform: translate(-50%, 10px); opacity: 0; pointer-events: none;

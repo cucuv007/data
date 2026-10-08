@@ -1,14 +1,17 @@
 const TABLE_NAME = 'Tespit';
 
-// Secret key istemcide yok; işlemler /api/db ve /api/upload üzerinden yapılır.
-const configReady = Promise.resolve();
-
 const $ = (s, r = document) => r.querySelector(s);
 const toLocalISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const safeUrl = u => /^https:\/\/[^\s"'<>`]+$/i.test(String(u ?? '')) ? String(u) : '';
+const toLogin = () => location.replace('login.html');
+async function apiError(res) {
+  let msg = '';
+  try { msg = (await res.json()).error || ''; } catch (e) { }
+  return new Error(msg || `İstek başarısız (${res.status})`);
+}
 
-/* ---------- Veri katmanı (Supabase) ---------- */
 const recKey = rec => [rec?.kurul ?? '', rec?.tarih ?? '', rec?.plaka ?? ''].join('::');
 const isSyntheticId = id => typeof id === 'string' && id.includes('::');
 const normalizeBool = v => v === true || v === 'true' || v === 1 || v === '1';
@@ -20,16 +23,14 @@ const stripSyntheticId = data => {
 
 const DB = {
   async req(path, method = 'GET', body = null) {
-    // Use server-side proxy to avoid exposing the Supabase secret key in the client
     const res = await fetch('/api/db', {
       method: 'POST',
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, method, body })
     });
-    if (!res.ok) {
-      const txt = await res.text();
-      throw new Error(txt || `Proxy request failed: ${res.status}`);
-    }
+    if (res.status === 401) { toLogin(); throw new Error('Oturum süresi doldu.'); }
+    if (!res.ok) throw await apiError(res);
     const txt = await res.text();
     return txt ? JSON.parse(txt) : null;
   },
@@ -43,7 +44,6 @@ const DB = {
     const filter = `kurul=eq.${encodeURIComponent(rec.kurul)}&tarih=eq.${encodeURIComponent(rec.tarih)}&plaka=eq.${encodeURIComponent(rec.plaka)}`;
     const payload = { ...stripSyntheticId(rec), durum: normalizeBool(rec.durum ?? false) };
 
-    // Mükerrer kontrolü (kurul, tarih, plaka)
     if (!isUpdate) {
       const dup = await this.req(`/rest/v1/${TABLE_NAME}?${filter}&select=*`);
       const sameRow = dup.some(r => r.kurul === rec.kurul && r.tarih === rec.tarih && r.plaka === rec.plaka && (isSyntheticRow ? true : !(r.kurul === rec.kurul && r.tarih === rec.tarih && r.plaka === rec.plaka)));
@@ -75,13 +75,10 @@ const DB = {
   }
 };
 
-/* ---------- Durum ---------- */
 let records = [];
 let editing = null;
 let files = { htt: [], fatura: [] };
-let viewUrl = null;
 
-/* ---------- Liste ---------- */
 let applied = {};
 let sorunluFilterActive = false;
 let memberFilterActive = false;
@@ -144,7 +141,7 @@ function render() {
   $('#list').innerHTML = rows.map(r => {
     const status = normalizeBool(r.durum);
     return `
-    <tr data-id="${rowId(r)}" data-status="${status}">
+    <tr data-id="${esc(rowId(r))}" data-status="${status}">
       <td class="plaka"><span class="plate"><b>${esc(r.plaka)}</b></span></td>
       <td class="tarih date">${fmtDate(r.tarih)}</td>
       <td class="kurul">${esc(r.kurul)}</td>
@@ -185,7 +182,6 @@ function refreshKurulLists() {
   $('#kurulList').innerHTML = kurullar.map(k => `<option value="${esc(k)}">`).join('');
 }
 
-/* ---------- Form ---------- */
 function setSaveStatus(msg = '', mode = 'info') {
   const status = $('#saveState');
   if (!status) return;
@@ -201,7 +197,6 @@ function openForm(rec = null) {
   f.reset();
   $('#formTitle').textContent = rec ? 'Kaydı düzenle' : 'Yeni kayıt';
   setSaveStatus('', 'info');
-  // Populate form fields explicitly by name to avoid any collection-indexing issues
   const fieldNames = ['kurul', 'plaka', 'tarih', 'driver', 'not'];
   fieldNames.forEach(k => {
     const el = $(`#form [name="${k}"]`);
@@ -221,8 +216,6 @@ function openForm(rec = null) {
     try { files.htt = rec.htt ? JSON.parse(rec.htt).map(u => ({ url: u, name: u.split('/').pop() })) : []; } catch(e){}
     try { files.fatura = rec.fatura ? JSON.parse(rec.fatura).map(u => ({ url: u, name: u.split('/').pop() })) : []; } catch(e){}
   }
-  // Clear any leftover window.files from prior auto-loads so we don't accidentally
-  // override the files loaded from the record when saving.
   try { delete window.files; } catch(e) { window.files = undefined; }
   syncFileBoxes();
   const formDlg = $('#formDlg');
@@ -241,7 +234,7 @@ function syncFileBoxes() {
       boxInner.innerHTML = fs.map((f, i) => `
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;background:var(--line);padding:4px 8px;border-radius:4px;">
           <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;">${esc(f.name)}</span>
-          ${f.url ? `<a href="${f.url}" target="_blank" class="link small">Aç</a>` : ''}
+          ${safeUrl(f.url) ? `<a href="${esc(safeUrl(f.url))}" target="_blank" rel="noopener noreferrer" class="link small">Aç</a>` : ''}
           <button type="button" class="link danger small" data-remove-idx="${i}">Sil</button>
         </div>
       `).join('');
@@ -259,9 +252,8 @@ function syncFileBoxes() {
   });
 }
 
-/* ---------- Otomatik Yükleme (Klasörden) ---------- */
 const baseNoExt = n => (String(n || '').split(/[\\/]/).pop() || '').replace(/\.[^.]+$/, '');
-const isNoteName = n => /not/i.test(baseNoExt(n)); // not, NOT, Not, notlar, not_1 ...
+const isNoteName = n => /not/i.test(baseNoExt(n));
 
 async function readTextSmart(file) {
   let buf;
@@ -301,7 +293,6 @@ async function readBestNote(list) {
 }
 
 async function pickDirectoryFallbackAndProcess() {
-  // Fallback using webkitdirectory input
   const input = $('#dirPickerFallback');
   return new Promise(res => {
     const handler = async () => {
@@ -310,16 +301,13 @@ async function pickDirectoryFallbackAndProcess() {
         console.log('Fallback picker selected files:', files.map(f=>f.name));
         toast(`${files.length} dosya seçildi (klasör fallback).`);
         
-        // Pre-read note content while input.files is still accessible
         let preReadNoteContent = null;
         
-        // Collect all .txt files, prioritize ones with 'not' in name
         const txtFiles = files.filter(f => {
           const lname = (f.name || '').toLowerCase();
           return lname.endsWith('.txt');
         });
         
-        // Sort: first those with 'not' in base name, then by size (largest first)
         txtFiles.sort((a, b) => {
           const aHasNot = /\bnot\b/i.test((a.name.split(/[\\/]/).pop() || '').replace(/\.[^.]+$/, ''));
           const bHasNot = /\bnot\b/i.test((b.name.split(/[\\/]/).pop() || '').replace(/\.[^.]+$/, ''));
@@ -328,7 +316,6 @@ async function pickDirectoryFallbackAndProcess() {
           return (b.size || 0) - (a.size || 0);
         });
         
-        // Try to read each .txt file until one succeeds
         for (const txtFile of txtFiles) {
           try {
             console.log('Attempting to read txt file:', txtFile.name);
@@ -345,10 +332,10 @@ async function pickDirectoryFallbackAndProcess() {
               };
               reader.readAsText(txtFile);
             });
-            break; // Success, stop trying
+            break;
           } catch (e) {
             console.warn('Failed to read', txtFile.name, ':', e);
-            continue; // Try next file
+            continue;
           }
         }
         
@@ -358,9 +345,8 @@ async function pickDirectoryFallbackAndProcess() {
           console.warn('No txt files could be read from fallback input');
         }
         
-        // Pass files and pre-read note content
         preReadNoteContent = (await readBestNote(files)) || preReadNoteContent;
-        await processPickedFiles(files, /*rootName*/ null, preReadNoteContent);
+        await processPickedFiles(files, null, preReadNoteContent);
       } catch (e) { console.error(e); }
       input.value = '';
       input.removeEventListener('change', handler);
@@ -372,7 +358,6 @@ async function pickDirectoryFallbackAndProcess() {
 }
 
 async function pickDirectoryAndProcess() {
-  // Prefer File System Access API if available
   if (window.showDirectoryPicker) {
     try {
       const dir = await window.showDirectoryPicker();
@@ -385,7 +370,6 @@ async function pickDirectoryAndProcess() {
             if (handle.kind === 'file') {
               try {
                 const f = await handle.getFile();
-                // emulate webkitRelativePath by prefixing folder name(s)
                 Object.defineProperty(f, 'webkitRelativePath', { value: prefix ? (prefix + '/' + name) : name, configurable: true });
                 files.push(f);
               } catch (fe) {
@@ -406,9 +390,6 @@ async function pickDirectoryAndProcess() {
       await recurse(dir);
       console.log('Picked files from showDirectoryPicker:', files.map(f=>f.name));
       toast(`${files.length} dosya bulundu. (${failedReads} okunamadı)`);
-      // If any reads failed it's often an environment/browser permission issue.
-      // In that case proactively open the fallback input so the user doesn't need
-      // to re-select the folder manually.
       if (failedReads > 0) {
         console.warn('Some showDirectoryPicker reads failed; invoking fallback input');
         toast('Bazı dosyalar okunamadı; alternatif seçim penceresi açılıyor...');
@@ -418,7 +399,6 @@ async function pickDirectoryAndProcess() {
       await processPickedFiles(files, dir.name, await readBestNote(files));
     } catch (e) {
       console.error(e);
-      // fallback
       await pickDirectoryFallbackAndProcess();
     }
   } else {
@@ -430,28 +410,22 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
   if (!pickedFiles || pickedFiles.length === 0) return;
   console.log('processPickedFiles called, rootName=', rootName, 'files=', pickedFiles.map(f=>f.name));
 
-  // Ensure the form is open
   if (!editing) {
     try { openForm(); } catch(e) { console.warn('Could not open form before processing files', e); }
   }
 
-  // Determine a candidate name to parse meta from: prefer rootName, else try to infer from path
   let candidate = rootName || '';
   if (!candidate) {
-    // try to use parent folder from first file's webkitRelativePath
     const p = pickedFiles[0].webkitRelativePath || pickedFiles[0].name;
     const parts = (p && p.indexOf('/') >= 0) ? p.split('/') : [];
     if (parts.length > 1) candidate = parts[0];
   }
-  // if still empty, attempt to use directory-like tokens from file name
   if (!candidate) candidate = pickedFiles[0].name;
 
   const meta = parseMetaFromName(candidate);
   console.log('Parsed meta from candidate:', candidate, meta);
 
-  // prepare to fill form fields
   const f = $('#form');
-  // Use explicit selectors to set fields to avoid collection/index issues
   const setField = (name, value) => {
     const el = $(`#form [name="${name}"]`);
     if (!el) return false;
@@ -470,7 +444,6 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
   }
   if (meta.driver) setField('driver', meta.driver);
 
-  // If nothing was parsed, try to infer a plate from filenames as fallback
   if (!meta.plaka) {
     for (const file of pickedFiles) {
       const m = (file.name || '').match(/([A-ZÇŞĞÜİÖ]{1,3}\s*\d{2,4})/i);
@@ -478,36 +451,27 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
     }
   }
 
-  // Only read .txt notes and metadata; DO NOT auto-attach PDFs (HTT/Fatura)
-  // Strategy:
-  // 1) Prefer files whose base filename equals 'not' (case-insensitive) or contains the standalone token 'not'.
-  // 2) If none found, pick the longest .txt file as a fallback.
   let txtCandidates = [];
   for (const file of pickedFiles) {
     const name = file.name || '';
     const lname = name.toLowerCase();
     console.log('Checking file for note candidate:', name);
     if (!lname.endsWith('.txt')) continue;
-    // derive base filename (without path and extension)
     const baseName = (name.split(/[\\/]/).pop() || '').toLowerCase();
     const baseNoExt = baseName.replace(/\.[^.]+$/, '');
-    // If base is exactly 'not' or contains token ' not ' etc., prefer it
     if (baseNoExt === 'not' || /\bnot\b/i.test(baseNoExt)) {
       txtCandidates.push({ file, score: 100 });
       console.log('Marked as strong note candidate:', name);
       continue;
     }
-    // otherwise, collect as weaker candidate (length-based later)
     txtCandidates.push({ file, score: 1 });
   }
 
-  // If we have any strong candidates (score 100), pick the first one; else pick the longest .txt
   let chosen = null;
   if (txtCandidates.length) {
     const strong = txtCandidates.filter(c => c.score === 100);
     if (strong.length) chosen = strong[0].file;
     else {
-      // choose by largest file size (if available) or by name length
       txtCandidates.sort((a, b) => {
         const sa = (a.file.size || 0);
         const sb = (b.file.size || 0);
@@ -546,7 +510,6 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
     }
   }
 
-  // Ensure PDF lists remain empty so user can add them manually
   files = { htt: [], fatura: [] };
   window.files = files;
   syncFileBoxes();
@@ -560,11 +523,9 @@ async function processPickedFiles(pickedFiles, rootName, preReadNoteContent) {
 function parseMetaFromName(name) {
   const out = {};
   if (!name) return out;
-  // Normalize spacing and keep original for later capitalization
   let s = name.replace(/[_\[\]()]/g, ' ').replace(/\s+/g, ' ').trim();
-  const S = s; // original cleaned
+  const S = s;
 
-  // 1) Extract KURUL token and remove it from the working string
   let m = s.match(/\b(KURUL)\s*[:\-]?\s*(\d+)\b/i);
   if (m) {
     out.kurul = (m[1] + ' ' + m[2]).toUpperCase();
@@ -577,33 +538,26 @@ function parseMetaFromName(name) {
     }
   }
 
-  // 2) Extract date (dd.mm.yyyy etc.) and remove it
   m = s.match(/(\d{1,2}[\.\-\/]\d{1,2}[\.\-\/]\d{2,4})/);
   if (m) {
     out.tarih = m[1];
     s = s.replace(m[0], ' ');
   }
 
-  // 3) Extract plate: look for 1-3 letters and 2-4 digits (ensure we don't match leftover 'KURUL')
   m = s.match(/\b([A-ZÇŞĞÜİÖ]{1,3})\s*(\d{2,4})\b/i);
   if (m) {
     out.plaka = (m[1] + ' ' + m[2]).toUpperCase();
     s = s.replace(m[0], ' ');
   }
 
-  // 4) Extract driver: after removing kurul, date, plate, find sequence of words (letters only) of length >=2
   if (!out.driver) {
-    // Remove common noisy suffixes that often land in the driver field
     s = s.replace(/\b(faturali|fatural[iı]|fatura|faturalar|fatural[ıi]|faturali|invoice)\b/ig, ' ');
     s = s.replace(/\b(üst\s*yaz[iı](?:\s*yaz[iı]l[ıi]?)?)\b/ig, ' ');
     s = s.replace(/\b(hemencecik|eklenmiştir|eklenmis)\b/ig, ' ');
-    // split remaining text into tokens and find runs of alphabetic words
     const tokens = s.split(/[^A-Za-zÇŞĞÜİÖçşğıüö]+/).filter(Boolean);
-    // find contiguous sequences of tokens with length >=2
     let bestSeq = [];
     let seq = [];
     for (const t of tokens) {
-      // skip tokens that look like numbers or short abbreviations of length 1
       if (/^\d+$/.test(t) || t.length === 1) {
         if (seq.length >= 2 && seq.length > bestSeq.length) bestSeq = seq.slice();
         seq = [];
@@ -613,8 +567,6 @@ function parseMetaFromName(name) {
     }
     if (seq.length >= 2 && seq.length > bestSeq.length) bestSeq = seq.slice();
     if (bestSeq.length >= 2) {
-      // Title-case the driver name
-      // filter out any remaining noise words and short tokens, then title-case
       const cleaned = bestSeq.filter(w => !/^\d+$/.test(w) && w.length > 1 && !/^(faturali|fatura|üst|yazı|yazildi|yazıldı)$/i.test(w));
       out.driver = cleaned.map(w => capitalizeWord(w)).join(' ');
     }
@@ -633,7 +585,6 @@ function parseDateString(s) {
   if (year < 100) year += 2000;
   try { return new Date(year, month-1, day); } catch(e) { return null; }
 }
-
 
 $$('.file').forEach(box => {
   const key = box.dataset.key, input = $('input[type=file]', box);
@@ -666,7 +617,6 @@ $('#form').addEventListener('submit', async e => {
       member: !!(f.member ? f.member.checked : false)
     };
 
-    // Dosyaları yükle
     for (const key of ['htt', 'fatura']) {
       let urls = [];
       for (const item of files[key]) {
@@ -693,17 +643,17 @@ $('#form').addEventListener('submit', async e => {
   }
 });
 
-/* ---------- Görüntüleyici ---------- */
 function showFile(jsonStr, title) {
   try {
     const arr = JSON.parse(jsonStr || '[]');
     if (!arr || arr.length === 0) return;
     $('#viewTitle').textContent = `${title} (${arr.length} dosya)`;
-    $('#viewBody').innerHTML = arr.map(url => {
-      const isPdf = url.toLowerCase().includes('.pdf');
+    $('#viewBody').innerHTML = arr.map(safeUrl).filter(Boolean).map(raw => {
+      const url = esc(raw);
+      const isPdf = raw.toLowerCase().includes('.pdf');
       return `<div style="margin-bottom:15px; border-bottom:1px solid var(--line); padding-bottom:10px;">
-        <a href="${url}" target="_blank" class="link" style="display:block;margin-bottom:5px;">Tam ekran aç</a>
-        ${isPdf ? `<iframe src="${url}" style="width:100%;height:400px;border:none;"></iframe>` : `<img src="${url}" style="max-width:100%;">`}
+        <a href="${url}" target="_blank" rel="noopener noreferrer" class="link" style="display:block;margin-bottom:5px;">Tam ekran aç</a>
+        ${isPdf ? `<iframe src="${url}" style="width:100%;height:400px;border:none;"></iframe>` : `<img src="${url}" alt="" style="max-width:100%;">`}
       </div>`;
     }).join('');
     $('#viewDlg').showModal();
@@ -716,7 +666,6 @@ function showNotePopup(text) {
   $('#noteDlg').showModal();
 }
 
-/* ---------- Olaylar ---------- */
 const docTitle = key => key === 'htt' ? 'HTT' : 'Fatura';
 const recOf = tr => records.find(r => rowId(r) === tr.dataset.id);
 
@@ -769,6 +718,8 @@ window.toggleSorunluFilter = function () {
   ara();
 };
 
+$('#sorunluBtn').addEventListener('click', window.toggleSorunluFilter);
+$('#memberBtn').addEventListener('click', window.toggleMemberFilter);
 $('#searchBtn').addEventListener('click', ara);
 $('#advSearchBtn').addEventListener('click', ara);
 $('#listBtn').addEventListener('click', listeleHepsi);
@@ -781,7 +732,6 @@ $('#advBtn').addEventListener('click', () => {
 });
 $('#clearBtn').addEventListener('click', listeleHepsi);
 
-/* Sağ tık (telefonda basılı tutma) menüsü */
 const ctx = $('#ctx');
 let ctxRec = null, pressTimer;
 function openCtx(tr, x, y) {
@@ -849,9 +799,7 @@ addEventListener('scroll', closeCtx, true);
 addEventListener('resize', closeCtx);
 
 $('#addBtn').addEventListener('click', () => openForm());
-// attach auto-load handler
 $('#autoLoadBtn')?.addEventListener('click', async () => {
-  // open form if not already
   if (!editing) openForm();
   await pickDirectoryAndProcess();
 });
@@ -895,21 +843,15 @@ function toast(msg) {
   toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
 }
 
-$('#logoutBtn').addEventListener('click', () => {
-  localStorage.removeItem('evrak-oturum');
-  sessionStorage.removeItem('evrak-oturum');
-  location.replace('login.html');
+$('#logoutBtn').addEventListener('click', async () => {
+  try { await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }); } catch (e) { }
+  toLogin();
 });
 
-// Wait for config to load before fetching data
-configReady.then(() => {
-  DB.all().then(rows => { records = rows; render(); }).catch(e => {
-    console.error('Veri yüklenemedi:', e);
-    toast('Veriler yüklenemedi: ' + String(e.message || e).slice(0, 150));
-  });
+DB.all().then(rows => { records = rows; render(); }).catch(e => {
+  toast('Veriler yüklenemedi: ' + String(e.message || e).slice(0, 150));
 });
 
-/* ---------- Dışa Aktarma ---------- */
 function normalizePdfText(value) {
   return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[ıİ]/g, ch => ch === 'ı' ? 'i' : 'I');
 }
@@ -1006,25 +948,21 @@ function exportRowsToPdf() {
 $('#exportExcelBtn').addEventListener('click', exportRowsToExcel);
 $('#exportPdfBtn').addEventListener('click', exportRowsToPdf);
 
-/* ---------- Dosya Yükleme ---------- */
 async function uploadFile(file) {
   const comp = await compressImage(file);
-  const ext = (comp.name.split('.').pop() || 'jpg').toLowerCase();
-  const fileName = Date.now() + '_' + Math.random().toString(36).substr(2, 5) + '.' + ext;
-  
-  const res = await fetch(`/api/upload?name=${encodeURIComponent(fileName)}`, {
+  const res = await fetch('/api/upload', {
     method: 'POST',
+    credentials: 'same-origin',
     headers: { 'Content-Type': comp.type || 'application/octet-stream' },
     body: comp
   });
-  if (!res.ok) {
-    throw new Error(`Upload error: ${res.status} ${await res.text()}`);
-  }
+  if (res.status === 401) { toLogin(); throw new Error('Oturum süresi doldu.'); }
+  if (!res.ok) throw await apiError(res);
   return (await res.json()).url;
 }
 
 async function compressImage(file, maxDim = 1200) {
-  if (file.type === 'application/pdf') return file; // PDF'ler sıkıştırılmaz
+  if (file.type === 'application/pdf') return file;
   return new Promise(res => {
     const reader = new FileReader();
     reader.onload = e => {
