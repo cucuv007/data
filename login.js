@@ -1,10 +1,6 @@
 const $ = s => document.querySelector(s);
 const form = $('#loginForm'), err = $('#err'), btn = $('#submit');
 
-fetch('/api/session', { credentials: 'same-origin' })
-  .then(r => { if (r.ok) location.replace('index.html'); })
-  .catch(() => { });
-
 $('#toggle').addEventListener('click', e => {
   const p = $('#pass'), show = p.type === 'password';
   p.type = show ? 'text' : 'password';
@@ -30,6 +26,7 @@ form.addEventListener('submit', async e => {
       body: JSON.stringify({ username: $('#user').value.trim(), password: $('#pass').value })
     });
     if (res.ok) {
+      try { sessionStorage.setItem('evrak-allow-index', '1'); } catch (x) { }
       location.replace('index.html');
       return;
     }
